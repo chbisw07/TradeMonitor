@@ -1,0 +1,8 @@
+# TradeMonitor
+# Development dependencies for TM0.
+#
+# Runtime dependencies will be added milestone-by-milestone
+# as the corresponding functionality is implemented.
+
+pytest>=8.0,<9.0
+

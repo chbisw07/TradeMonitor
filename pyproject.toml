@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trademonitor"
+version = "0.0.1"
+description = "Architecture-first trade monitoring project skeleton for Indian markets."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+]
+
+[project.scripts]
+trademonitor = "trademonitor.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# Future dependency placeholders:
+# pydantic - structured settings and domain validation
+# rich - console UI rendering
+# typer - CLI entry points
+# sqlalchemy - persistence layer
+# httpx - HTTP integrations
+# websockets - streaming market-data integrations
