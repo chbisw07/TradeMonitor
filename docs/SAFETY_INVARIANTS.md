@@ -59,3 +59,16 @@
 - Agent unavailability, malformed response, or correlation failure must never become implicit approval.
 - Agent suggestions are non-authoritative and cannot directly create or modify broker exposure.
 - No path from Agents reaches Module M directly.
+
+## TM2/TGT4 Risk Gate Invariants
+
+- Risk Management is the highest runtime operational authority inside TM.
+- A new-exposure proposal may be Risk-approved only after broker truth has been reconciled in the current runtime.
+- Last-known persisted broker state is not sufficient to authorize fresh risk after restart.
+- Every `BLOCK` is durably logged with profile version, reason(s), proposal facts, and portfolio metrics.
+- `UNMANAGED` broker positions count toward portfolio/open-position/exposure risk but remain a hard read-only boundary.
+- Risk settings may change only through the explicit Setup/Admin propose + confirm workflow.
+- No ordinary trade command can force or ignore a Risk block.
+- Risk profile changes are versioned and audited; they do not silently resurrect blocked trades.
+- A `RISK_BLOCKED` entry requires an explicit re-evaluation request before another Risk gate can occur.
+- `RISK_APPROVED` is permission from RM only; it is not an ExecutionRequest and does not invoke Module M.

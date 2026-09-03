@@ -14,6 +14,9 @@ from trademonitor.domain.models import (
     OutcomeRecord,
     PositionRecord,
     SourceObservation,
+    RiskProfile,
+    RiskDecisionRecord,
+    RiskProfileChange,
 )
 from trademonitor.persistence.database import Database
 
@@ -92,6 +95,24 @@ class RuntimeRepository(ABC):
 
     @abstractmethod
     def list_entry_reviews(self, *, entry_intent_id: str | None = None) -> list[EntryReviewRecord]: ...
+
+    @abstractmethod
+    def save_risk_profile(self, record: Mapping[str, Any]) -> None: ...
+
+    @abstractmethod
+    def get_active_risk_profile(self) -> RiskProfile | None: ...
+
+    @abstractmethod
+    def save_risk_decision(self, record: Mapping[str, Any]) -> None: ...
+
+    @abstractmethod
+    def list_risk_decisions(self, *, entry_intent_id: str | None = None) -> list[RiskDecisionRecord]: ...
+
+    @abstractmethod
+    def save_risk_profile_change(self, record: Mapping[str, Any]) -> None: ...
+
+    @abstractmethod
+    def get_risk_profile_change(self, change_id: str) -> RiskProfileChange | None: ...
 
 
 # Backward-compatible name retained from TM0 skeleton.
@@ -490,4 +511,55 @@ class SQLiteRuntimeRepository(RuntimeRepository):
         with self._database.connect() as connection:
             rows = connection.execute(sql, params).fetchall()
         return [self._entry_review_from_row(row) for row in rows]
+
+    def save_risk_profile(self, record: Mapping[str, Any]) -> None:
+        with self._database.connect() as connection:
+            connection.execute(
+                """INSERT INTO risk_profiles(version, record_json, created_at) VALUES (?, ?, ?)
+                   ON CONFLICT(version) DO UPDATE SET record_json=excluded.record_json, created_at=excluded.created_at""",
+                (int(record["version"]), json.dumps(dict(record), sort_keys=True, default=str), str(record["created_at"])),
+            )
+
+    def get_active_risk_profile(self) -> RiskProfile | None:
+        with self._database.connect() as connection:
+            row = connection.execute("SELECT * FROM risk_profiles ORDER BY version DESC LIMIT 1").fetchone()
+        if row is None:
+            return None
+        return RiskProfile.from_record(json.loads(row["record_json"]))
+
+    def save_risk_decision(self, record: Mapping[str, Any]) -> None:
+        with self._database.connect() as connection:
+            connection.execute(
+                """INSERT INTO risk_decisions(decision_id, entry_intent_id, record_json, decision, evaluated_at)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(decision_id) DO UPDATE SET record_json=excluded.record_json, decision=excluded.decision, evaluated_at=excluded.evaluated_at""",
+                (str(record["decision_id"]), str(record["entry_intent_id"]), json.dumps(dict(record), sort_keys=True, default=str), str(record["decision"]), str(record["evaluated_at"])),
+            )
+
+    def list_risk_decisions(self, *, entry_intent_id: str | None = None) -> list[RiskDecisionRecord]:
+        sql = "SELECT * FROM risk_decisions"
+        params: tuple[str, ...] = ()
+        if entry_intent_id is not None:
+            sql += " WHERE entry_intent_id = ?"
+            params = (entry_intent_id,)
+        sql += " ORDER BY evaluated_at, decision_id"
+        with self._database.connect() as connection:
+            rows = connection.execute(sql, params).fetchall()
+        return [RiskDecisionRecord.from_record(json.loads(row["record_json"])) for row in rows]
+
+    def save_risk_profile_change(self, record: Mapping[str, Any]) -> None:
+        with self._database.connect() as connection:
+            connection.execute(
+                """INSERT INTO risk_profile_changes(change_id, record_json, status, requested_at)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(change_id) DO UPDATE SET record_json=excluded.record_json, status=excluded.status, requested_at=excluded.requested_at""",
+                (str(record["change_id"]), json.dumps(dict(record), sort_keys=True, default=str), str(record["status"]), str(record["requested_at"])),
+            )
+
+    def get_risk_profile_change(self, change_id: str) -> RiskProfileChange | None:
+        with self._database.connect() as connection:
+            row = connection.execute("SELECT * FROM risk_profile_changes WHERE change_id = ?", (change_id,)).fetchone()
+        if row is None:
+            return None
+        return RiskProfileChange.from_record(json.loads(row["record_json"]))
 

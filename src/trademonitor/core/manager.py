@@ -15,13 +15,17 @@ from trademonitor.core.context import RuntimeContexts
 from trademonitor.core.event_bus import EventBus
 from trademonitor.core.health import DomainHealthReport, FaultReport
 from trademonitor.core.recovery import FreshnessRelation, compare_observation_time, runtime_fingerprint
-from trademonitor.domain.enums import AgentVerdict, AttentionLevel, AttentionStatus, EntryIntentState, HealthStatus
+from trademonitor.domain.enums import AgentVerdict, AttentionLevel, AttentionStatus, EntryIntentState, HealthStatus, RiskDecision
 from trademonitor.domain.events import DomainEvent
 from trademonitor.domain.models import (
     AttentionItem,
     EntryIntentRecord,
     EntryMarketSnapshot,
     EntryReviewRecord,
+    EntryRiskProposal,
+    RiskDecisionRecord,
+    RiskProfile,
+    RiskProfileChange,
     EpisodeRecord,
     IntakeResult,
     NormalizedTradeIntent,
@@ -31,6 +35,7 @@ from trademonitor.entry.monitor import EntryMonitor
 from trademonitor.entry.review import EntryReviewCoordinator
 from trademonitor.persistence.repository import RuntimeRepository
 from trademonitor.positions.manager import PositionManager
+from trademonitor.risk.engine import RiskEngine
 
 
 class CoreTMManager:
@@ -51,6 +56,7 @@ class CoreTMManager:
         )
         self._entry = EntryMonitor(repository)
         self._entry_review = EntryReviewCoordinator(repository)
+        self._risk = RiskEngine(repository)
         self._lock = RLock()
         self._started = False
 
@@ -87,8 +93,20 @@ class CoreTMManager:
                     "domains": domains,
                 }
             )
-            self._contexts.get("broker").data.setdefault("status", "NOT_RECONCILED")
+            broker_ctx = self._contexts.get("broker")
+            broker_ctx.data.setdefault("status", "NOT_RECONCILED")
+            # Persisted broker truth is useful last-known context, but Risk Management
+            # must require a fresh reconciliation in the current runtime before
+            # authorising new exposure.
+            broker_ctx.patch({"runtime_reconciled": False})
             self._contexts.get("decision").data.setdefault("attention_queue", [])
+            profile = self._risk.ensure_profile()
+            self._contexts.get("risk").patch({
+                "status": "READY",
+                "active_profile_version": profile.version,
+                "profile": profile.to_record(),
+                "authority": "HIGHEST_RUNTIME",
+            })
             self._refresh_position_context()
             self._refresh_entry_context()
             self._persist_all_contexts()
@@ -253,6 +271,126 @@ class CoreTMManager:
         with self._lock:
             self._ensure_started()
             return self._entry_review.list_reviews(entry_intent_id=entry_intent_id)
+
+    def evaluate_entry_risk(
+        self,
+        entry_intent_id: str,
+        proposal: EntryRiskProposal,
+        *,
+        evaluated_at: datetime | None = None,
+    ) -> RiskDecisionRecord:
+        """Run the highest-authority pre-trade Risk Management gate.
+
+        This target still creates no ExecutionRequest. A PASS only establishes
+        current RM permission for the evaluated proposal.
+        """
+        with self._lock:
+            self._ensure_started()
+            intent = self._repository.get_entry_intent(entry_intent_id)
+            if intent is None:
+                raise KeyError(f"Unknown entry intent: {entry_intent_id}")
+            updated, decision, events = self._risk.evaluate_entry(
+                intent=intent,
+                proposal=proposal,
+                positions=self._positions.list_positions(open_only=True),
+                broker_context=dict(self._contexts.get("broker").data),
+                evaluated_at=evaluated_at,
+            )
+            for event in events:
+                self._record_event(event)
+            risk = self._contexts.get("risk")
+            risk.patch({
+                "status": "BLOCKED" if decision.decision == RiskDecision.BLOCK else "PASS",
+                "active_profile_version": decision.profile_version,
+                "last_decision_id": decision.decision_id,
+                "last_entry_intent_id": entry_intent_id,
+                "last_decision": decision.decision.value,
+                "last_reasons": list(decision.reasons),
+                "metrics": dict(decision.metrics),
+            })
+            self._repository.save_context(risk.to_record())
+            if decision.decision == RiskDecision.BLOCK:
+                self.add_attention(
+                    level=AttentionLevel.ATTENTION,
+                    source="RISK",
+                    title=f"Risk blocked entry: {entry_intent_id}",
+                    detail=(
+                        "Risk Management blocked the proposed new exposure. "
+                        + ", ".join(decision.reasons)
+                        + ". Normal trade commands cannot override this block."
+                    ),
+                )
+            else:
+                self._resolve_matching_attention(
+                    source="RISK", title=f"Risk blocked entry: {entry_intent_id}"
+                )
+            self._refresh_entry_context()
+            return decision
+
+    def rearm_risk_blocked_entry(
+        self, entry_intent_id: str, *, at: datetime, reason: str
+    ) -> EntryIntentRecord:
+        """Explicitly return a blocked entry to READY_FOR_RISK for a fresh gate.
+
+        Risk-profile changes never revive blocked trades automatically. This method
+        is the deliberate re-evaluation boundary.
+        """
+        with self._lock:
+            self._ensure_started()
+            intent, event = self._risk.rearm_blocked_entry(
+                entry_intent_id, at=at, reason=reason
+            )
+            self._record_event(event)
+            self._resolve_matching_attention(
+                source="RISK", title=f"Risk blocked entry: {entry_intent_id}"
+            )
+            self._refresh_entry_context()
+            return intent
+
+    def risk_decision_snapshot(
+        self, *, entry_intent_id: str | None = None
+    ) -> list[RiskDecisionRecord]:
+        with self._lock:
+            self._ensure_started()
+            return self._risk.list_decisions(entry_intent_id=entry_intent_id)
+
+    def active_risk_profile(self) -> RiskProfile:
+        with self._lock:
+            self._ensure_started()
+            return self._risk.active_profile()
+
+    def admin_propose_risk_profile_change(self, **kwargs) -> RiskProfileChange:
+        """Setup/Admin path: propose only; active RM is unchanged."""
+        with self._lock:
+            self._ensure_started()
+            change, event = self._risk.admin_propose_profile_change(**kwargs)
+            self._record_event(event)
+            return change
+
+    def admin_confirm_risk_profile_change(
+        self,
+        change_id: str,
+        *,
+        confirmation: str,
+        confirmed_at: datetime | None = None,
+    ) -> RiskProfile:
+        """Setup/Admin path: deliberate confirmation activates a new version."""
+        with self._lock:
+            self._ensure_started()
+            profile, change, events = self._risk.admin_confirm_profile_change(
+                change_id, confirmation=confirmation, confirmed_at=confirmed_at
+            )
+            for event in events:
+                self._record_event(event)
+            risk = self._contexts.get("risk")
+            risk.patch({
+                "status": "READY",
+                "active_profile_version": profile.version,
+                "profile": profile.to_record(),
+                "last_profile_change_id": change.change_id,
+            })
+            self._repository.save_context(risk.to_record())
+            return profile
 
     def patch_context(
         self,
@@ -452,6 +590,14 @@ class CoreTMManager:
                 previous_observed_at = self._last_broker_observed_at(snapshot.broker)
                 freshness = compare_observation_time(snapshot.observed_at, previous_observed_at)
                 if freshness in {FreshnessRelation.REPLAY, FreshnessRelation.STALE}:
+                    # An exact replay is still a successful current-runtime broker
+                    # confirmation. It changes no business state, but it satisfies
+                    # the Risk gate's requirement that broker truth was checked in
+                    # this runtime. A stale older snapshot does not.
+                    if freshness == FreshnessRelation.REPLAY:
+                        broker_ctx = self._contexts.get("broker")
+                        broker_ctx.patch({"runtime_reconciled": True})
+                        self._repository.save_context(broker_ctx.to_record())
                     self._record_event(
                         DomainEvent.create(
                             "BROKER_SNAPSHOT_IGNORED",
@@ -481,6 +627,7 @@ class CoreTMManager:
                     "order_count": snapshot.order_count,
                     "fill_count": snapshot.fill_count,
                     "read_only": True,
+                    "runtime_reconciled": True,
                 }
                 if snapshot.funds is not None:
                     broker_values["funds"] = {
@@ -533,7 +680,7 @@ class CoreTMManager:
                 # unrelated domains are not collapsed by this failure.
                 self.patch_context(
                     "broker",
-                    {"status": "UNAVAILABLE", "read_only": True},
+                    {"status": "UNAVAILABLE", "read_only": True, "runtime_reconciled": False},
                     source="BROKER",
                     reason="broker reconciliation failed",
                 )

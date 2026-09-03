@@ -134,6 +134,8 @@ class EntryIntentState(StrEnum):
     AGENT_REVIEW_PENDING = "AGENT_REVIEW_PENDING"
     USER_DECISION_PENDING = "USER_DECISION_PENDING"
     READY_FOR_RISK = "READY_FOR_RISK"
+    RISK_APPROVED = "RISK_APPROVED"
+    RISK_BLOCKED = "RISK_BLOCKED"
     REJECTED = "REJECTED"
     INVALIDATED = "INVALIDATED"
     EXPIRED = "EXPIRED"
@@ -162,3 +164,18 @@ class ConditionOperator(StrEnum):
     BELOW = "BELOW"
     AT_OR_BELOW = "AT_OR_BELOW"
 
+
+
+class RiskDecision(StrEnum):
+    """Authoritative result of a Risk Management gate."""
+
+    PASS = "PASS"
+    BLOCK = "BLOCK"
+
+
+class RiskChangeStatus(StrEnum):
+    """Lifecycle of a deliberate Setup/Admin Risk configuration change."""
+
+    PENDING = "PENDING"
+    CONFIRMED = "CONFIRMED"
+    CANCELLED = "CANCELLED"

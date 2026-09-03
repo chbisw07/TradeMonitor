@@ -34,3 +34,10 @@ Next roadmap target after acceptance/freeze:
 ## TM2/TGT3 — External Agents Validation Gate — IMPLEMENTED
 
 Implemented the separate external Agents-service boundary, mandatory tri-state verdict, User escalation on disagreement/unavailability, durable audit/restart behavior, and post-review `READY_FOR_RISK` handoff. Risk Management remains TM2/TGT4.
+
+
+## TM2/TGT4 — Risk Management Entry Gate — IMPLEMENTED
+
+Implemented deterministic `PASS / BLOCK` pre-trade Risk authority, versioned Setup/Admin profiles, current-runtime broker-truth requirement, portfolio visibility including UNMANAGED positions, durable block logging, and explicit Risk re-evaluation. TM2 is complete in PAPER mode.
+
+Next roadmap milestone after acceptance/freeze: **TM3 / TGT1 — Position Manager and Adoption**.

@@ -1,3 +1,17 @@
+# Changelog
+
+## Version 0.2.3 / TM2-TGT4 — Risk Management Entry Gate
+
+- Added highest-authority deterministic pre-trade Risk gate (`PASS / BLOCK`).
+- Added versioned Risk Profiles without inventing numeric bootstrap thresholds.
+- Added account/portfolio risk visibility including `UNMANAGED` broker positions while preserving their hard read-only boundary.
+- Added current-runtime broker-reconciliation requirement before fresh risk can be approved.
+- Added durable Risk decision records, block audit events, and Attention surfacing.
+- Added two-step Setup/Admin Risk profile change workflow with explicit reason, confirmation, versioning, and audit.
+- Added explicit re-evaluation boundary for previously `RISK_BLOCKED` entries; profile changes never silently revive trades.
+- Added `RISK_APPROVED` handoff state; no ExecutionRequest, Module M, or broker-write capability exists yet.
+- Full suite: 70 tests passing.
+
 ## 0.2.2 — TM2/TGT3
 
 - Added external Agents-service gateway contract for entry validation.
@@ -8,8 +22,6 @@
 - Preserved optional Agent suggestions as non-authoritative advice.
 - Added restart-safe review/attention persistence and tests.
 - No broker-write/live-trading capability added.
-
-# Changelog
 
 ## Version 0.2.1 / TM2-TGT2 — Entry Monitoring and Trade Intent
 

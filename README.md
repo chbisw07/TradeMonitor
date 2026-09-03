@@ -10,23 +10,24 @@ The canonical design references are kept under `docs/`:
 
 ## Current Status
 
-**TM2 / TGT2 — Entry Monitoring and Trade Intent**
+**TM2 / TGT4 — Risk Management Entry Gate — COMPLETE**
 
-TM1 is frozen and complete. TM2/TGT1 established intake identity. TM2/TGT2 adds deterministic entry monitoring while preserving the PAPER/read-only boundary:
+TM1 is frozen and complete. TM2 now implements the full PAPER-mode entry-decision path:
 
-- immutable source observations with explicit `src_id`, source, datetime and provenance
-- normalized broad Outcome identity
-- time-relevant Episode identity for changing market/contract context
-- exact observation de-duplication and restart-safe persistence
-- same-source/different-outcome and different-source/same-outcome reconciliation
-- existing broker-position awareness without implicit scale-in
-- explicit bounded ambiguity-resolution port for the separate external Agents service
-- Core trade context receives only summarized intake counts; Intake remains domain owner
-- PAPER mode remains explicit; live execution remains disabled
+- source-aware Trade Intake with Outcome/Episode/time relevance and de-duplication
+- deterministic Entry Monitoring with trigger/confirmation/invalidation and DAY/BTST/STBT/POS intent
+- separate external Agents validation gate with `APPROVE / REJECT / RETREAT_WAIT` and User escalation
+- highest-authority Risk Management entry gate with deterministic `PASS / BLOCK`
+- account/portfolio visibility including `UNMANAGED` broker positions without violating their read-only boundary
+- versioned Setup/Admin-only Risk configuration with deliberate confirmation and audit
+- explicit `RISK_BLOCKED` re-evaluation boundary
+- current-runtime broker truth required before fresh risk can be approved
 
-**NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM2/TGT2.**
+A Risk `PASS` reaches only `RISK_APPROVED`. It is **not** an ExecutionRequest.
 
-Entry trigger/confirmation logic, full Agent validation workflow, Risk Management entry gates, position-management policies, Exit Monitor, Module M, and real broker writes remain later roadmap targets.
+**NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM2/TGT4.**
+
+Module M, real execution, position-management policies, and Exit Monitor remain later roadmap targets.
 
 ## Development Setup
 

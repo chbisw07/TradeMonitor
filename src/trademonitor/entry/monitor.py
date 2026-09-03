@@ -57,6 +57,8 @@ class EntryMonitor:
             EntryIntentState.AGENT_REVIEW_PENDING,
             EntryIntentState.USER_DECISION_PENDING,
             EntryIntentState.READY_FOR_RISK,
+            EntryIntentState.RISK_APPROVED,
+            EntryIntentState.RISK_BLOCKED,
         }:
             return current, []
 

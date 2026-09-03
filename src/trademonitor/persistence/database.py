@@ -138,5 +138,30 @@ class Database:
 
                 CREATE INDEX IF NOT EXISTS idx_entry_reviews_intent_updated
                     ON entry_reviews(entry_intent_id, updated_at);
+
+                CREATE TABLE IF NOT EXISTS risk_profiles (
+                    version INTEGER PRIMARY KEY,
+                    record_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS risk_decisions (
+                    decision_id TEXT PRIMARY KEY,
+                    entry_intent_id TEXT NOT NULL,
+                    record_json TEXT NOT NULL,
+                    decision TEXT NOT NULL,
+                    evaluated_at TEXT NOT NULL,
+                    FOREIGN KEY(entry_intent_id) REFERENCES entry_intents(entry_intent_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_risk_decisions_intent_time
+                    ON risk_decisions(entry_intent_id, evaluated_at);
+
+                CREATE TABLE IF NOT EXISTS risk_profile_changes (
+                    change_id TEXT PRIMARY KEY,
+                    record_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    requested_at TEXT NOT NULL
+                );
                 """
             )

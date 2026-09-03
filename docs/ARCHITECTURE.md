@@ -70,3 +70,15 @@ The Agents capability is a **separate external service**. TradeMonitor owns only
 `APPROVE` advances to `READY_FOR_RISK`. `REJECT` and `RETREAT_WAIT` are lower-authority opinions and therefore escalate to the User. An optional Agent suggestion is advice only and must re-enter normal TM evaluation if pursued. Agent failure is never treated as approval.
 
 Agents cannot mutate TM state directly, cannot call Module M, cannot access broker execution, and cannot bypass Risk Management.
+
+## TM2/TGT4 Risk Management Entry Gate
+
+Risk Management (RM) is the highest runtime operational authority inside TradeMonitor. The TM2/TGT4 entry gate evaluates a fully validated entry intent only after it reaches `READY_FOR_RISK`. A Risk decision is deterministic: `PASS` or `BLOCK`.
+
+RM evaluates the proposed new exposure against the active versioned Risk Profile and current broker-confirmed account state. All open broker positions contribute to portfolio visibility, including `UNMANAGED` positions. Their exposure can therefore cause a new TM entry to be blocked, but the hard `UNMANAGED` boundary remains intact: RM may observe/count them but cannot modify, exit, hedge, or otherwise operate on them.
+
+The bootstrap profile intentionally invents no numeric trading limits. Numeric limits are introduced only through the explicit Setup/Admin profile-change workflow. Broker truth, however, must be reconciled in the current runtime before RM can approve creation of new exposure. Persisted last-known broker facts alone are insufficient.
+
+A profile change is two-step: propose with a reason, then explicitly confirm. Confirmation creates a new immutable profile version and is audited. There is no ordinary `force`, `ignore-risk`, or trade-level risk override path. A profile change does not automatically revive a previously `RISK_BLOCKED` trade; explicit re-evaluation is required.
+
+A Risk `PASS` moves the entry to `RISK_APPROVED`. This is still not an `ExecutionRequest`. Module M remains outside TM2 and no broker-write path exists.

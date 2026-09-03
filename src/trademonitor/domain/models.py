@@ -925,3 +925,218 @@ class EntryReviewRecord:
             user_decision=None if record.get("user_decision") is None else AgentVerdict(record["user_decision"]),
             user_reason=record.get("user_reason"),
         )
+
+
+@dataclass(frozen=True)
+class RiskProfile:
+    """Versioned Risk Management configuration.
+
+    Numeric limits are optional so the bootstrap profile can exist without
+    inventing business thresholds. Broker truth is still required by the entry
+    gate before new exposure can be approved.
+    """
+
+    version: int
+    created_at: datetime
+    reason: str
+    max_position_value: Decimal | None = None
+    max_trade_loss: Decimal | None = None
+    max_open_positions: int | None = None
+    max_total_exposure: Decimal | None = None
+
+    def __init__(
+        self,
+        *,
+        version: int,
+        created_at: datetime | None = None,
+        reason: str,
+        max_position_value=None,
+        max_trade_loss=None,
+        max_open_positions: int | None = None,
+        max_total_exposure=None,
+    ) -> None:
+        if int(version) < 1:
+            raise ValueError("Risk profile version must be >= 1")
+        if not str(reason).strip():
+            raise ValueError("Risk profile reason is required")
+        for name, value in {
+            "max_position_value": max_position_value,
+            "max_trade_loss": max_trade_loss,
+            "max_total_exposure": max_total_exposure,
+        }.items():
+            dec = _decimal(value)
+            if dec is not None and dec <= 0:
+                raise ValueError(f"{name} must be > 0 when configured")
+        if max_open_positions is not None and int(max_open_positions) < 1:
+            raise ValueError("max_open_positions must be >= 1 when configured")
+        object.__setattr__(self, "version", int(version))
+        object.__setattr__(self, "created_at", created_at or utc_now())
+        object.__setattr__(self, "reason", str(reason).strip())
+        object.__setattr__(self, "max_position_value", _decimal(max_position_value))
+        object.__setattr__(self, "max_trade_loss", _decimal(max_trade_loss))
+        object.__setattr__(self, "max_open_positions", None if max_open_positions is None else int(max_open_positions))
+        object.__setattr__(self, "max_total_exposure", _decimal(max_total_exposure))
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "version": self.version,
+            "created_at": self.created_at.isoformat(),
+            "reason": self.reason,
+            "max_position_value": None if self.max_position_value is None else str(self.max_position_value),
+            "max_trade_loss": None if self.max_trade_loss is None else str(self.max_trade_loss),
+            "max_open_positions": self.max_open_positions,
+            "max_total_exposure": None if self.max_total_exposure is None else str(self.max_total_exposure),
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "RiskProfile":
+        return cls(
+            version=int(record["version"]),
+            created_at=datetime.fromisoformat(str(record["created_at"])),
+            reason=str(record["reason"]),
+            max_position_value=record.get("max_position_value"),
+            max_trade_loss=record.get("max_trade_loss"),
+            max_open_positions=record.get("max_open_positions"),
+            max_total_exposure=record.get("max_total_exposure"),
+        )
+
+
+@dataclass(frozen=True)
+class EntryRiskProposal:
+    """Concrete risk facts for one proposed entry.
+
+    This is not an ExecutionRequest. Quantity/price are supplied here because
+    Risk Management must evaluate the exposure that would be created.
+    """
+
+    entry_intent_id: str
+    requested_at: datetime
+    planned_qty: int
+    planned_entry_price: Decimal
+    planned_max_loss: Decimal | None = None
+
+    def __init__(
+        self,
+        *,
+        entry_intent_id: str,
+        requested_at: datetime,
+        planned_qty: int,
+        planned_entry_price,
+        planned_max_loss=None,
+    ) -> None:
+        if requested_at.tzinfo is None:
+            raise ValueError("requested_at must be timezone-aware")
+        if int(planned_qty) <= 0:
+            raise ValueError("planned_qty must be > 0")
+        price = _decimal(planned_entry_price)
+        if price is None or price <= 0:
+            raise ValueError("planned_entry_price must be > 0")
+        loss = _decimal(planned_max_loss)
+        if loss is not None and loss < 0:
+            raise ValueError("planned_max_loss cannot be negative")
+        object.__setattr__(self, "entry_intent_id", str(entry_intent_id))
+        object.__setattr__(self, "requested_at", requested_at)
+        object.__setattr__(self, "planned_qty", int(planned_qty))
+        object.__setattr__(self, "planned_entry_price", price)
+        object.__setattr__(self, "planned_max_loss", loss)
+
+    @property
+    def planned_position_value(self) -> Decimal:
+        return self.planned_entry_price * self.planned_qty
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "entry_intent_id": self.entry_intent_id,
+            "requested_at": self.requested_at.isoformat(),
+            "planned_qty": self.planned_qty,
+            "planned_entry_price": str(self.planned_entry_price),
+            "planned_max_loss": None if self.planned_max_loss is None else str(self.planned_max_loss),
+            "planned_position_value": str(self.planned_position_value),
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "EntryRiskProposal":
+        return cls(
+            entry_intent_id=str(record["entry_intent_id"]),
+            requested_at=datetime.fromisoformat(str(record["requested_at"])),
+            planned_qty=int(record["planned_qty"]),
+            planned_entry_price=record["planned_entry_price"],
+            planned_max_loss=record.get("planned_max_loss"),
+        )
+
+
+@dataclass(frozen=True)
+class RiskDecisionRecord:
+    """Durable authoritative Risk Management decision."""
+
+    decision_id: str
+    entry_intent_id: str
+    profile_version: int
+    decision: "RiskDecision"
+    evaluated_at: datetime
+    reasons: tuple[str, ...]
+    metrics: Mapping[str, Any]
+    proposal: EntryRiskProposal
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "decision_id": self.decision_id,
+            "entry_intent_id": self.entry_intent_id,
+            "profile_version": self.profile_version,
+            "decision": self.decision.value,
+            "evaluated_at": self.evaluated_at.isoformat(),
+            "reasons": list(self.reasons),
+            "metrics": dict(self.metrics),
+            "proposal": self.proposal.to_record(),
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "RiskDecisionRecord":
+        from trademonitor.domain.enums import RiskDecision
+        return cls(
+            decision_id=str(record["decision_id"]),
+            entry_intent_id=str(record["entry_intent_id"]),
+            profile_version=int(record["profile_version"]),
+            decision=RiskDecision(record["decision"]),
+            evaluated_at=datetime.fromisoformat(str(record["evaluated_at"])),
+            reasons=tuple(str(x) for x in record.get("reasons", ())),
+            metrics=dict(record.get("metrics", {})),
+            proposal=EntryRiskProposal.from_record(record["proposal"]),
+        )
+
+
+@dataclass(frozen=True)
+class RiskProfileChange:
+    """Pending/confirmed Setup/Admin risk-profile change request."""
+
+    change_id: str
+    status: "RiskChangeStatus"
+    proposed: Mapping[str, Any]
+    reason: str
+    requested_at: datetime
+    confirmed_at: datetime | None = None
+    resulting_profile_version: int | None = None
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "change_id": self.change_id,
+            "status": self.status.value,
+            "proposed": dict(self.proposed),
+            "reason": self.reason,
+            "requested_at": self.requested_at.isoformat(),
+            "confirmed_at": None if self.confirmed_at is None else self.confirmed_at.isoformat(),
+            "resulting_profile_version": self.resulting_profile_version,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "RiskProfileChange":
+        from trademonitor.domain.enums import RiskChangeStatus
+        return cls(
+            change_id=str(record["change_id"]),
+            status=RiskChangeStatus(record["status"]),
+            proposed=dict(record.get("proposed", {})),
+            reason=str(record["reason"]),
+            requested_at=datetime.fromisoformat(str(record["requested_at"])),
+            confirmed_at=None if record.get("confirmed_at") is None else datetime.fromisoformat(str(record["confirmed_at"])),
+            resulting_profile_version=record.get("resulting_profile_version"),
+        )
