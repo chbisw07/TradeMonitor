@@ -27,3 +27,9 @@ Broker/position reconciliation events introduced in TGT2:
 - `BROKER_POSITION_REOPENED`
 
 Later milestones add intake, risk, management, execution, and recovery events without changing the core event contract unnecessarily.
+
+## TM1/TGT4 Replay Semantics
+
+`event_id` is the durable idempotency key for a domain event. Re-submitting the same event ID is a no-op for persistence and runtime publication.
+
+Broker snapshots are not keyed by event ID; their `observed_at` timestamp is compared with the last accepted observation for that broker. Older observations are `STALE`; equal-timestamp observations are treated as `REPLAY`. Both remain auditable but cannot mutate canonical broker/position state.

@@ -15,13 +15,11 @@ Completed and frozen:
 
 - **TGT1 — Core TM Manager and Runtime Contexts**
 - **TGT2 — Broker Truth and Position Reconciliation**
-
-Current implementation target completed in this working tree:
-
 - **TGT3 — Health, Fault Containment and Control Room**
-
-TM1/TGT3 adds domain health reporting, vertical nearest-owner fault containment/escalation, horizontal peer-domain isolation, capability-specific degradation, a durable Attention queue, and a unified control-room view. It preserves the read-only broker boundary and contains **no live broker write capability**.
-
-Next roadmap target after TGT3 acceptance/freeze:
-
 - **TGT4 — PAPER Runtime, Recovery and Replay Validation**
+
+TM1 is complete in this working tree. TGT4 validates restart/recovery, stale and replayed broker observations, duplicate-event tolerance, broker degraded→healthy recovery, persistent auditability, and the hard PAPER/read-only safety boundary.
+
+Next roadmap milestone after TM1 acceptance/freeze:
+
+- **TM2 / TGT1 — Trade Intake, Source Identity, Outcome and Episode**

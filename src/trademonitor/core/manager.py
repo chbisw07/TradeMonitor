@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from threading import RLock
 from typing import Any
 
@@ -11,6 +12,7 @@ from trademonitor.core.attention import create_attention_item, resolve_attention
 from trademonitor.core.context import RuntimeContexts
 from trademonitor.core.event_bus import EventBus
 from trademonitor.core.health import DomainHealthReport, FaultReport
+from trademonitor.core.recovery import FreshnessRelation, compare_observation_time, runtime_fingerprint
 from trademonitor.domain.enums import AttentionLevel, AttentionStatus, HealthStatus
 from trademonitor.domain.events import DomainEvent
 from trademonitor.domain.models import AttentionItem, PositionRecord
@@ -123,10 +125,43 @@ class CoreTMManager:
             )
 
     def publish(self, event: DomainEvent) -> None:
-        """Record an event first, then publish it to runtime subscribers."""
+        """Record/publish an event once; exact replays are harmless."""
         with self._lock:
             self._ensure_started()
             self._record_event(event)
+
+    def mark_context_stale(
+        self,
+        context_name: str,
+        *,
+        domain: str,
+        reason: str,
+        impact: Sequence[str] = (),
+    ) -> None:
+        """Mark one domain/context stale without collapsing unrelated peers."""
+        with self._lock:
+            self._ensure_started()
+            self.patch_context(
+                context_name,
+                {"status": "STALE"},
+                source=domain.upper(),
+                reason=reason,
+            )
+            self.report_domain_health(
+                DomainHealthReport.create(
+                    domain,
+                    HealthStatus.DEGRADED,
+                    reason,
+                    impact=impact or (f"{context_name} context is stale",),
+                )
+            )
+            self._record_event(
+                DomainEvent.create(
+                    "CONTEXT_MARKED_STALE",
+                    source=domain.upper(),
+                    payload={"context": context_name, "reason": reason, "impact": list(impact)},
+                )
+            )
 
     # ------------------------------------------------------------------
     # TM1/TGT3 health/fault coordination
@@ -200,6 +235,10 @@ class CoreTMManager:
         """Add a durable operator-facing item to the Attention queue."""
         with self._lock:
             self._ensure_started()
+            normalized_source = source.upper()
+            for existing in self.attention_snapshot(active_only=True):
+                if existing.source == normalized_source and existing.title == title:
+                    return existing
             item = create_attention_item(level=level, source=source, title=title, detail=detail)
             self._save_attention(item)
             self._record_event(
@@ -251,6 +290,26 @@ class CoreTMManager:
                         f"snapshot={snapshot.broker!r}"
                     )
 
+                previous_observed_at = self._last_broker_observed_at(snapshot.broker)
+                freshness = compare_observation_time(snapshot.observed_at, previous_observed_at)
+                if freshness in {FreshnessRelation.REPLAY, FreshnessRelation.STALE}:
+                    self._record_event(
+                        DomainEvent.create(
+                            "BROKER_SNAPSHOT_IGNORED",
+                            source="BROKER",
+                            payload={
+                                "broker": snapshot.broker,
+                                "relation": freshness.value,
+                                "incoming_observed_at": snapshot.observed_at.isoformat(),
+                                "last_accepted_observed_at": (
+                                    previous_observed_at.isoformat() if previous_observed_at else None
+                                ),
+                            },
+                            occurred_at=snapshot.observed_at,
+                        )
+                    )
+                    return self._positions.list_positions(broker=snapshot.broker)
+
                 positions, events = self._positions.reconcile(snapshot)
                 for event in events:
                     self._record_event(event)
@@ -288,6 +347,9 @@ class CoreTMManager:
                         HealthStatus.HEALTHY,
                         "Position context reconciled to broker truth",
                     )
+                )
+                self._resolve_matching_attention(
+                    source="BROKER", title="Broker reconciliation unavailable"
                 )
                 self._record_event(
                     DomainEvent.create(
@@ -375,6 +437,30 @@ class CoreTMManager:
                 "attention": self.attention_snapshot(active_only=True),
             }
 
+    def runtime_fingerprint(self) -> str:
+        """Stable business-state fingerprint used by PAPER replay validation."""
+        with self._lock:
+            self._ensure_started()
+            return runtime_fingerprint(self.status_snapshot(), self.positions_snapshot())
+
+    def _last_broker_observed_at(self, broker_name: str) -> datetime | None:
+        broker_ctx = self._contexts.get("broker").data
+        if broker_ctx.get("broker") != broker_name:
+            return None
+        value = broker_ctx.get("observed_at")
+        if not value:
+            return None
+        return datetime.fromisoformat(str(value))
+
+    def _resolve_matching_attention(self, *, source: str, title: str) -> None:
+        matches = [
+            item
+            for item in self.attention_snapshot(active_only=True)
+            if item.source == source.upper() and item.title == title
+        ]
+        for item in matches:
+            self.resolve_attention(item.attention_id, source=source.upper())
+
     def _save_attention(self, item: AttentionItem) -> None:
         items = self.attention_snapshot(active_only=False)
         items.append(item)
@@ -401,8 +487,9 @@ class CoreTMManager:
         )
 
     def _record_event(self, event: DomainEvent) -> None:
-        self._repository.append_event(event.to_record())
-        self._event_bus.publish(event)
+        inserted = self._repository.append_event(event.to_record())
+        if inserted:
+            self._event_bus.publish(event)
 
     def _persist_all_contexts(self) -> None:
         for context in self._contexts.contexts.values():

@@ -16,3 +16,14 @@
 - Vertical failures are handled by the nearest competent owner before escalation.
 - Broker truth becoming unavailable must be surfaced; stale/unknown broker state must not be treated as current truth.
 - TM1/TGT3 remains PAPER-only with no broker write operations.
+
+## TM1/TGT4 Recovery / Replay Invariants
+
+- Older broker truth must never overwrite newer accepted broker truth.
+- Replayed external facts must not create duplicate business side effects.
+- Exact duplicate domain events are processed at most once by event ID.
+- Restart must restore durable state before normal coordination resumes.
+- Failure/recovery must not change `UNMANAGED` into `MANAGED`.
+- Repeated identical failures should not create unbounded duplicate operator Attention.
+- Recovery may restore capability; failure may never silently increase authority.
+- TM1 remains PAPER-only and exposes no broker-write API.

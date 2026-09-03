@@ -46,3 +46,9 @@ Core coordinates the coherent health picture; it is not a global raw-exception h
 The console is an operational control-room view, not a scrolling business-logic owner. It renders one coherent snapshot containing domain health, capability impact, unified Positions (`MANAGED` / `UNMANAGED`), and an Attention queue. Attention is durable across restart.
 
 TM1/TGT3 remains PAPER-only and broker-read-only.
+
+## TM1/TGT4 Recovery and Replay Boundary
+
+TM1 recovery is state-convergent rather than action-replaying. Persisted contexts are restored, then newer external facts—especially broker truth—are reconciled. Older or already-accepted broker observations cannot roll state backward. Exact duplicate events are harmless through event-ID idempotency. Replay/audit activity may add log records, but must not manufacture new broker exposure or change the `MANAGED` / `UNMANAGED` boundary.
+
+A stable business-state fingerprint is used by replay validation to distinguish semantic state from bookkeeping timestamps and context-version increments.

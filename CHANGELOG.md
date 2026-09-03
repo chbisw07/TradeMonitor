@@ -1,5 +1,17 @@
 # Changelog
 
+## Version 0.1.3 / TM1-TGT4 — PAPER Runtime, Recovery and Replay Validation
+
+- Added stale/replayed broker snapshot classification and rejection of out-of-order truth.
+- Added idempotent duplicate-event persistence/publication by event ID.
+- Added stable runtime business-state fingerprints for replay validation.
+- Added ungraceful restart and offline broker-change recovery validation.
+- Added broker degraded→healthy recovery with Attention resolution.
+- Added Attention de-duplication for repeated identical outages.
+- Added generic stale-context degradation without cross-domain collapse.
+- Added replay/recovery acceptance suite; complete test suite is 30/30 passing.
+- Preserved PAPER-only runtime and zero broker write capability.
+
 ## Version 0.1.2 / TM1-TGT3 — Health, Fault Containment and Control Room
 
 - Added domain health reporting with capability-specific impact.

@@ -24,7 +24,7 @@ class RuntimeRepository(ABC):
     def load_contexts(self) -> list[dict[str, Any]]: ...
 
     @abstractmethod
-    def append_event(self, record: Mapping[str, Any]) -> None: ...
+    def append_event(self, record: Mapping[str, Any]) -> bool: ...
 
     @abstractmethod
     def list_events(self, *, limit: int | None = None) -> list[dict[str, Any]]: ...
@@ -84,12 +84,13 @@ class SQLiteRuntimeRepository(RuntimeRepository):
             for row in rows
         ]
 
-    def append_event(self, record: Mapping[str, Any]) -> None:
+    def append_event(self, record: Mapping[str, Any]) -> bool:
+        """Append once by event_id; duplicate/replayed events are harmless."""
         payload_json = json.dumps(record.get("payload", {}), sort_keys=True, default=str)
         with self._database.connect() as connection:
-            connection.execute(
+            cursor = connection.execute(
                 """
-                INSERT INTO event_log(event_id, name, occurred_at, source, payload_json)
+                INSERT OR IGNORE INTO event_log(event_id, name, occurred_at, source, payload_json)
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (
@@ -100,6 +101,7 @@ class SQLiteRuntimeRepository(RuntimeRepository):
                     payload_json,
                 ),
             )
+        return cursor.rowcount == 1
 
     def list_events(self, *, limit: int | None = None) -> list[dict[str, Any]]:
         query = (

@@ -43,3 +43,14 @@ class DomainEvent:
             "source": self.source,
             "payload": dict(self.payload),
         }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "DomainEvent":
+        """Rehydrate an event without changing its identity for replay."""
+        return cls(
+            event_id=str(record["event_id"]),
+            name=str(record["name"]),
+            occurred_at=datetime.fromisoformat(str(record["occurred_at"])),
+            source=str(record["source"]),
+            payload=dict(record.get("payload", {})),
+        )
