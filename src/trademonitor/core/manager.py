@@ -16,7 +16,8 @@ from trademonitor.core.health import DomainHealthReport, FaultReport
 from trademonitor.core.recovery import FreshnessRelation, compare_observation_time, runtime_fingerprint
 from trademonitor.domain.enums import AttentionLevel, AttentionStatus, HealthStatus
 from trademonitor.domain.events import DomainEvent
-from trademonitor.domain.models import AttentionItem, IntakeResult, NormalizedTradeIntent, PositionRecord
+from trademonitor.domain.models import AttentionItem, EntryIntentRecord, EntryMarketSnapshot, EpisodeRecord, IntakeResult, NormalizedTradeIntent, PositionRecord
+from trademonitor.entry.monitor import EntryMonitor
 from trademonitor.persistence.repository import RuntimeRepository
 from trademonitor.positions.manager import PositionManager
 
@@ -37,6 +38,7 @@ class CoreTMManager:
         self._intake = TradeIntakeManager(
             repository, positions_provider=lambda: self._positions.list_positions(open_only=True)
         )
+        self._entry = EntryMonitor(repository)
         self._lock = RLock()
         self._started = False
 
@@ -76,6 +78,7 @@ class CoreTMManager:
             self._contexts.get("broker").data.setdefault("status", "NOT_RECONCILED")
             self._contexts.get("decision").data.setdefault("attention_queue", [])
             self._refresh_position_context()
+            self._refresh_entry_context()
             self._persist_all_contexts()
             self._started = True
             self._record_event(
@@ -132,6 +135,41 @@ class CoreTMManager:
         with self._lock:
             self._ensure_started()
             return self._intake.snapshot()
+
+
+    def create_entry_intent(self, *, episode: EpisodeRecord, **kwargs) -> EntryIntentRecord:
+        """Admit one Episode into deterministic entry monitoring (PAPER only)."""
+        with self._lock:
+            self._ensure_started()
+            intent, events = self._entry.create_for_episode(episode=episode, **kwargs)
+            for event in events:
+                self._record_event(event)
+            self._refresh_entry_context()
+            return intent
+
+    def evaluate_entry_intent(self, entry_intent_id: str, snapshot: EntryMarketSnapshot) -> EntryIntentRecord:
+        """Evaluate trigger/confirmation/current-market validity without execution."""
+        with self._lock:
+            self._ensure_started()
+            intent, events = self._entry.evaluate(entry_intent_id, snapshot)
+            for event in events:
+                self._record_event(event)
+            self._refresh_entry_context()
+            return intent
+
+    def rearm_entry_intent(self, entry_intent_id: str, *, at: datetime, reason: str) -> EntryIntentRecord:
+        with self._lock:
+            self._ensure_started()
+            intent, events = self._entry.rearm(entry_intent_id, at=at, reason=reason)
+            for event in events:
+                self._record_event(event)
+            self._refresh_entry_context()
+            return intent
+
+    def entry_snapshot(self) -> list[EntryIntentRecord]:
+        with self._lock:
+            self._ensure_started()
+            return self._entry.list_active()
 
     def patch_context(
         self,
@@ -532,6 +570,15 @@ class CoreTMManager:
     def _persist_all_contexts(self) -> None:
         for context in self._contexts.contexts.values():
             self._repository.save_context(context.to_record())
+
+    def _refresh_entry_context(self) -> None:
+        active = self._entry.list_active()
+        counts: dict[str, int] = {}
+        for item in active:
+            counts[item.state.value] = counts.get(item.state.value, 0) + 1
+        trade = self._contexts.get("trade")
+        trade.patch({"entry_monitoring": {"active": len(active), "by_state": counts}})
+        self._repository.save_context(trade.to_record())
 
     def _refresh_position_context(self, *, source: str | None = None) -> None:
         positions = self._repository.list_positions()

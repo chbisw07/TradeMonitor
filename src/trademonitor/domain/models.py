@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, Mapping
 
@@ -505,3 +505,214 @@ class IntakeResult:
             and self.disposition in {IntakeDisposition.NEW_OUTCOME, IntakeDisposition.NEW_EPISODE}
         )
 
+
+@dataclass(frozen=True)
+class PriceCondition:
+    """Simple deterministic price condition used by entry monitoring."""
+
+    operator: "ConditionOperator"
+    value: Decimal
+
+    def __init__(self, operator, value) -> None:
+        from trademonitor.domain.enums import ConditionOperator
+        object.__setattr__(self, "operator", ConditionOperator(operator))
+        object.__setattr__(self, "value", _decimal(value) or Decimal("0"))
+
+    def matches(self, actual: Decimal | str | int | float) -> bool:
+        from trademonitor.domain.enums import ConditionOperator
+        price = _decimal(actual) or Decimal("0")
+        if self.operator == ConditionOperator.ABOVE:
+            return price > self.value
+        if self.operator == ConditionOperator.AT_OR_ABOVE:
+            return price >= self.value
+        if self.operator == ConditionOperator.BELOW:
+            return price < self.value
+        if self.operator == ConditionOperator.AT_OR_BELOW:
+            return price <= self.value
+        raise ValueError(f"Unsupported operator: {self.operator}")
+
+    def to_record(self) -> dict[str, str]:
+        return {"operator": self.operator.value, "value": str(self.value)}
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any] | None) -> "PriceCondition | None":
+        if not record:
+            return None
+        return cls(record["operator"], record["value"])
+
+
+@dataclass(frozen=True)
+class EntryMarketSnapshot:
+    """Current facts supplied to the Entry domain for one evaluation cycle."""
+
+    observed_at: datetime
+    spot: Decimal
+    premium: Decimal | None = None
+    completed_candle_close: Decimal | None = None
+
+    def __init__(self, *, observed_at: datetime, spot, premium=None, completed_candle_close=None) -> None:
+        object.__setattr__(self, "observed_at", observed_at)
+        object.__setattr__(self, "spot", _decimal(spot) or Decimal("0"))
+        object.__setattr__(self, "premium", _decimal(premium))
+        object.__setattr__(self, "completed_candle_close", _decimal(completed_candle_close))
+
+
+@dataclass(frozen=True)
+class EntryIntentRecord:
+    """Durable monitored entry intent tied to one time-relevant Episode.
+
+    This is not an ExecutionRequest. READY_FOR_REVIEW means only that deterministic
+    entry monitoring passed and the opportunity may proceed to later Agent/RM gates.
+    """
+
+    entry_intent_id: str
+    episode_id: str
+    underlying: str
+    direction: str
+    trade_type: "TradeType"
+    asset_class: "AssetClass"
+    instrument_type: "InstrumentType"
+    horizon_at: datetime
+    trigger: PriceCondition
+    confirmation: PriceCondition | None = None
+    invalidation: PriceCondition | None = None
+    expiry_date: date | None = None
+    contract_symbol: str | None = None
+    option_type: str | None = None
+    strike: str | None = None
+    premium_min: Decimal | None = None
+    premium_max: Decimal | None = None
+    state: "EntryIntentState" = None  # type: ignore[assignment]
+    created_at: datetime = None  # type: ignore[assignment]
+    updated_at: datetime = None  # type: ignore[assignment]
+    last_spot: Decimal | None = None
+    last_premium: Decimal | None = None
+    last_reason: str | None = None
+
+    def __init__(
+        self,
+        *,
+        entry_intent_id: str,
+        episode_id: str,
+        underlying: str,
+        direction: str,
+        trade_type,
+        asset_class,
+        instrument_type,
+        horizon_at: datetime,
+        trigger: PriceCondition,
+        confirmation: PriceCondition | None = None,
+        invalidation: PriceCondition | None = None,
+        expiry_date: date | str | None = None,
+        contract_symbol: str | None = None,
+        option_type: str | None = None,
+        strike: str | None = None,
+        premium_min=None,
+        premium_max=None,
+        state=None,
+        created_at: datetime | None = None,
+        updated_at: datetime | None = None,
+        last_spot=None,
+        last_premium=None,
+        last_reason: str | None = None,
+    ) -> None:
+        from trademonitor.domain.enums import AssetClass, EntryIntentState, InstrumentType, TradeType
+        now = utc_now()
+        tt = TradeType(trade_type)
+        ac = AssetClass(asset_class)
+        it = InstrumentType(instrument_type)
+        exp = date.fromisoformat(expiry_date) if isinstance(expiry_date, str) else expiry_date
+        if horizon_at.tzinfo is None:
+            raise ValueError("horizon_at must be timezone-aware")
+        if it in {InstrumentType.FUTURE, InstrumentType.OPTION} and exp is None:
+            raise ValueError("F&O entry intents require expiry_date")
+        if it == InstrumentType.CASH and exp is not None:
+            raise ValueError("CASH entry intents must not carry expiry_date")
+        if exp is not None and horizon_at.date() > exp:
+            raise ValueError("trade horizon cannot extend beyond contract expiry")
+        pmin, pmax = _decimal(premium_min), _decimal(premium_max)
+        if pmin is not None and pmax is not None and pmin > pmax:
+            raise ValueError("premium_min cannot exceed premium_max")
+        object.__setattr__(self, "entry_intent_id", entry_intent_id)
+        object.__setattr__(self, "episode_id", episode_id)
+        object.__setattr__(self, "underlying", underlying.strip().upper())
+        object.__setattr__(self, "direction", direction.strip().upper())
+        object.__setattr__(self, "trade_type", tt)
+        object.__setattr__(self, "asset_class", ac)
+        object.__setattr__(self, "instrument_type", it)
+        object.__setattr__(self, "horizon_at", horizon_at)
+        object.__setattr__(self, "trigger", trigger)
+        object.__setattr__(self, "confirmation", confirmation)
+        object.__setattr__(self, "invalidation", invalidation)
+        object.__setattr__(self, "expiry_date", exp)
+        object.__setattr__(self, "contract_symbol", contract_symbol.upper() if contract_symbol else None)
+        object.__setattr__(self, "option_type", option_type.upper() if option_type else None)
+        object.__setattr__(self, "strike", strike)
+        object.__setattr__(self, "premium_min", pmin)
+        object.__setattr__(self, "premium_max", pmax)
+        object.__setattr__(self, "state", EntryIntentState(state or EntryIntentState.MONITORING))
+        object.__setattr__(self, "created_at", created_at or now)
+        object.__setattr__(self, "updated_at", updated_at or now)
+        object.__setattr__(self, "last_spot", _decimal(last_spot))
+        object.__setattr__(self, "last_premium", _decimal(last_premium))
+        object.__setattr__(self, "last_reason", last_reason)
+
+    @property
+    def active(self) -> bool:
+        from trademonitor.domain.enums import EntryIntentState
+        return self.state not in {EntryIntentState.INVALIDATED, EntryIntentState.EXPIRED, EntryIntentState.CANCELLED}
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "entry_intent_id": self.entry_intent_id,
+            "episode_id": self.episode_id,
+            "underlying": self.underlying,
+            "direction": self.direction,
+            "trade_type": self.trade_type.value,
+            "asset_class": self.asset_class.value,
+            "instrument_type": self.instrument_type.value,
+            "horizon_at": self.horizon_at.isoformat(),
+            "trigger": self.trigger.to_record(),
+            "confirmation": None if self.confirmation is None else self.confirmation.to_record(),
+            "invalidation": None if self.invalidation is None else self.invalidation.to_record(),
+            "expiry_date": None if self.expiry_date is None else self.expiry_date.isoformat(),
+            "contract_symbol": self.contract_symbol,
+            "option_type": self.option_type,
+            "strike": self.strike,
+            "premium_min": None if self.premium_min is None else str(self.premium_min),
+            "premium_max": None if self.premium_max is None else str(self.premium_max),
+            "state": self.state.value,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "last_spot": None if self.last_spot is None else str(self.last_spot),
+            "last_premium": None if self.last_premium is None else str(self.last_premium),
+            "last_reason": self.last_reason,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "EntryIntentRecord":
+        return cls(
+            entry_intent_id=str(record["entry_intent_id"]),
+            episode_id=str(record["episode_id"]),
+            underlying=str(record["underlying"]),
+            direction=str(record["direction"]),
+            trade_type=record["trade_type"],
+            asset_class=record["asset_class"],
+            instrument_type=record["instrument_type"],
+            horizon_at=datetime.fromisoformat(str(record["horizon_at"])),
+            trigger=PriceCondition.from_record(record["trigger"]),
+            confirmation=PriceCondition.from_record(record.get("confirmation")),
+            invalidation=PriceCondition.from_record(record.get("invalidation")),
+            expiry_date=record.get("expiry_date"),
+            contract_symbol=record.get("contract_symbol"),
+            option_type=record.get("option_type"),
+            strike=record.get("strike"),
+            premium_min=record.get("premium_min"),
+            premium_max=record.get("premium_max"),
+            state=record.get("state"),
+            created_at=datetime.fromisoformat(str(record["created_at"])),
+            updated_at=datetime.fromisoformat(str(record["updated_at"])),
+            last_spot=record.get("last_spot"),
+            last_premium=record.get("last_premium"),
+            last_reason=record.get("last_reason"),
+        )

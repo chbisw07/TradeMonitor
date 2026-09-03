@@ -10,9 +10,9 @@ The canonical design references are kept under `docs/`:
 
 ## Current Status
 
-**TM2 / TGT1 — Trade Intake, Source Identity, Outcome and Episode**
+**TM2 / TGT2 — Entry Monitoring and Trade Intent**
 
-TM1 is frozen and complete. TM2/TGT1 adds the first entry-side domain capability while preserving the PAPER/read-only boundary:
+TM1 is frozen and complete. TM2/TGT1 established intake identity. TM2/TGT2 adds deterministic entry monitoring while preserving the PAPER/read-only boundary:
 
 - immutable source observations with explicit `src_id`, source, datetime and provenance
 - normalized broad Outcome identity
@@ -24,7 +24,7 @@ TM1 is frozen and complete. TM2/TGT1 adds the first entry-side domain capability
 - Core trade context receives only summarized intake counts; Intake remains domain owner
 - PAPER mode remains explicit; live execution remains disabled
 
-**NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM2/TGT1.**
+**NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM2/TGT2.**
 
 Entry trigger/confirmation logic, full Agent validation workflow, Risk Management entry gates, position-management policies, Exit Monitor, Module M, and real broker writes remain later roadmap targets.
 

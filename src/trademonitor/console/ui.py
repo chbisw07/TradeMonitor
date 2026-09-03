@@ -12,7 +12,7 @@ class ConsoleUI:
     """Render concise runtime state without owning business logic."""
 
     def render_status(self, snapshot: Mapping[str, Mapping[str, Any]]) -> str:
-        lines = ["TradeMonitor TM2/TGT1", "=" * 72]
+        lines = ["TradeMonitor TM2/TGT2", "=" * 72]
         health = snapshot.get("health", {}).get("data", {})
         broker = snapshot.get("broker", {}).get("data", {})
         positions = snapshot.get("position", {}).get("data", {})
@@ -40,6 +40,10 @@ class ConsoleUI:
                 episodes=intake.get("active_episodes", 0),
             )
         )
+        entry = snapshot.get("trade", {}).get("data", {}).get("entry_monitoring", {})
+        states = entry.get("by_state", {})
+        state_text = ", ".join(f"{name}={count}" for name, count in sorted(states.items())) or "none"
+        lines.append(f"Entry: Active {entry.get('active', 0)} | States: {state_text}")
         lines.append("")
         lines.append("Domain Health")
         domains = health.get("domains", {})

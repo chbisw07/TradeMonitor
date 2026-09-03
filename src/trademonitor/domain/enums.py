@@ -99,3 +99,46 @@ class ExposureRelation(StrEnum):
     SAME_UNDERLYING = "SAME_UNDERLYING"
     EXACT_CONTRACT = "EXACT_CONTRACT"
 
+class TradeType(StrEnum):
+    """Holding intent; independent from instrument type."""
+
+    DAY = "DAY"
+    BTST = "BTST"
+    STBT = "STBT"
+    POS = "POS"
+
+
+class AssetClass(StrEnum):
+    """Initial TradeMonitor asset scope."""
+
+    EQUITY = "EQUITY"
+    INDEX = "INDEX"
+
+
+class InstrumentType(StrEnum):
+    """Tradable instrument shape. CASH is retained for later stock support."""
+
+    CASH = "CASH"
+    FUTURE = "FUTURE"
+    OPTION = "OPTION"
+
+
+class EntryIntentState(StrEnum):
+    """Operational state of a monitored entry intent."""
+
+    MONITORING = "MONITORING"
+    TRIGGERED = "TRIGGERED"
+    CONFIRMING = "CONFIRMING"
+    RETREAT_WAIT = "RETREAT_WAIT"
+    READY_FOR_REVIEW = "READY_FOR_REVIEW"
+    INVALIDATED = "INVALIDATED"
+    EXPIRED = "EXPIRED"
+    CANCELLED = "CANCELLED"
+
+
+class ConditionOperator(StrEnum):
+    ABOVE = "ABOVE"
+    AT_OR_ABOVE = "AT_OR_ABOVE"
+    BELOW = "BELOW"
+    AT_OR_BELOW = "AT_OR_BELOW"
+

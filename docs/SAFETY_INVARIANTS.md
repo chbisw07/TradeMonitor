@@ -39,3 +39,14 @@
 - Existing `MANAGED` or `UNMANAGED` broker exposure may influence intake awareness, but Intake has no authority to operate on that exposure.
 - Ambiguity delegation is through an explicit external-service port; TM core contains no Agents implementation.
 - TM2/TGT1 remains PAPER-only and exposes no broker-write path.
+
+
+## TM2/TGT2 Entry Monitoring Invariants
+
+- `READY_FOR_REVIEW` is not execution permission.
+- Nothing in Entry Monitoring can write to the broker or create an `ExecutionRequest`.
+- F&O trade horizon must not extend beyond contract expiry.
+- Failed confirmation or unacceptable current premium may retreat/wait rather than chase.
+- A `RETREAT_WAIT` intent does not silently rearm itself.
+- Repeated/re-discovered opportunity input does not imply scale-in.
+- Nothing creating risk reaches Module M without current Risk Management permission.

@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import Any
 
-from trademonitor.domain.models import EpisodeRecord, OutcomeRecord, PositionRecord, SourceObservation
+from trademonitor.domain.models import EntryIntentRecord, EpisodeRecord, OutcomeRecord, PositionRecord, SourceObservation
 from trademonitor.persistence.database import Database
 
 
@@ -61,6 +61,18 @@ class RuntimeRepository(ABC):
 
     @abstractmethod
     def intake_counts(self) -> dict[str, int]: ...
+
+    @abstractmethod
+    def save_entry_intent(self, record: Mapping[str, Any]) -> None: ...
+
+    @abstractmethod
+    def get_entry_intent(self, entry_intent_id: str) -> EntryIntentRecord | None: ...
+
+    @abstractmethod
+    def get_active_entry_intent_for_episode(self, episode_id: str) -> EntryIntentRecord | None: ...
+
+    @abstractmethod
+    def list_entry_intents(self, *, active_only: bool = False) -> list[EntryIntentRecord]: ...
 
 
 # Backward-compatible name retained from TM0 skeleton.
@@ -357,4 +369,52 @@ class SQLiteRuntimeRepository(RuntimeRepository):
             episodes = connection.execute("SELECT COUNT(*) AS n FROM intake_episodes").fetchone()["n"]
             active = connection.execute("SELECT COUNT(*) AS n FROM intake_episodes WHERE status='ACTIVE'").fetchone()["n"]
         return {"observations": observations, "outcomes": outcomes, "episodes": episodes, "active_episodes": active}
+    def save_entry_intent(self, record: Mapping[str, Any]) -> None:
+        with self._database.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO entry_intents(entry_intent_id, episode_id, record_json, state, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(entry_intent_id) DO UPDATE SET
+                    episode_id=excluded.episode_id, record_json=excluded.record_json,
+                    state=excluded.state, updated_at=excluded.updated_at
+                """,
+                (str(record["entry_intent_id"]), str(record["episode_id"]),
+                 json.dumps(dict(record), sort_keys=True, default=str),
+                 str(record["state"]), str(record["updated_at"])),
+            )
+
+    @staticmethod
+    def _entry_intent_from_row(row) -> EntryIntentRecord | None:
+        if row is None:
+            return None
+        return EntryIntentRecord.from_record(json.loads(row["record_json"]))
+
+    def get_entry_intent(self, entry_intent_id: str) -> EntryIntentRecord | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM entry_intents WHERE entry_intent_id = ?", (entry_intent_id,)
+            ).fetchone()
+        return self._entry_intent_from_row(row)
+
+    def get_active_entry_intent_for_episode(self, episode_id: str) -> EntryIntentRecord | None:
+        terminal = ("INVALIDATED", "EXPIRED", "CANCELLED")
+        with self._database.connect() as connection:
+            row = connection.execute(
+                """SELECT * FROM entry_intents WHERE episode_id = ?
+                   AND state NOT IN (?, ?, ?) ORDER BY updated_at DESC LIMIT 1""",
+                (episode_id, *terminal),
+            ).fetchone()
+        return self._entry_intent_from_row(row)
+
+    def list_entry_intents(self, *, active_only: bool = False) -> list[EntryIntentRecord]:
+        sql = "SELECT * FROM entry_intents"
+        params = ()
+        if active_only:
+            sql += " WHERE state NOT IN (?, ?, ?)"
+            params = ("INVALIDATED", "EXPIRED", "CANCELLED")
+        sql += " ORDER BY updated_at, entry_intent_id"
+        with self._database.connect() as connection:
+            rows = connection.execute(sql, params).fetchall()
+        return [self._entry_intent_from_row(row) for row in rows]
 

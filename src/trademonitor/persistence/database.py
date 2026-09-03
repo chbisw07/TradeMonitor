@@ -114,5 +114,17 @@ class Database:
                     ON source_observations(src_id);
                 CREATE INDEX IF NOT EXISTS idx_source_observations_outcome
                     ON source_observations(outcome_id, observed_at);
+
+                CREATE TABLE IF NOT EXISTS entry_intents (
+                    entry_intent_id TEXT PRIMARY KEY,
+                    episode_id TEXT NOT NULL,
+                    record_json TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(episode_id) REFERENCES intake_episodes(episode_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_entry_intents_episode_state
+                    ON entry_intents(episode_id, state);
                 """
             )

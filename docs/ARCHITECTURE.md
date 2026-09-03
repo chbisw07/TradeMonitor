@@ -57,3 +57,8 @@ A stable business-state fingerprint is used by replay validation to distinguish 
 ## TM2/TGT1 intake identity
 
 Trade intake separates three questions: **Source Observation** (who/what said it and when), **Outcome** (the broad trading idea), and **Episode** (the currently relevant manifestation of that Outcome in market time/contract context). Candidate remains an operational/UI notion rather than another heavy domain entity. Clear reconciliation is deterministic. A genuinely ambiguous same-Outcome Episode question may be delegated through a bounded interface to the separate external Agents service; ownership returns to Intake. Existing broker-confirmed exposure is awareness only and repeated signals never imply scale-in.
+
+
+## TM2/TGT2 entry monitoring
+
+A time-relevant Episode may be admitted into the Entry domain as a durable Entry Intent. The Entry domain owns deterministic trigger, optional completed-candle confirmation, underlying invalidation, horizon/expiry boundaries, and current contract-premium revalidation. `RETREAT_WAIT` is a deliberate reversible state and requires rearm before another cycle. `READY_FOR_REVIEW` is only a handoff point for later validation; it is not execution permission. Entry monitoring does not call Module M and does not write to the broker.

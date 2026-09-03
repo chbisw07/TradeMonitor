@@ -1,5 +1,17 @@
 # Changelog
 
+## Version 0.2.1 / TM2-TGT2 — Entry Monitoring and Trade Intent
+
+- Added durable Entry Intent monitoring tied to time-relevant Episodes.
+- Added deterministic trigger, completed-candle confirmation, invalidation, and RETREAT_WAIT/rearm flow.
+- Added final current-market premium-zone revalidation so stretched option entries retreat rather than chase.
+- Added frozen holding intents `DAY`, `BTST`, `STBT`, and `POS`, with horizon separate from F&O expiry.
+- Added initial `EQUITY` / `INDEX` asset scope and `CASH` / `FUTURE` / `OPTION` instrument model; CASH remains future-compatible.
+- Added restart-safe entry-intent persistence and Core trade-context summaries.
+- Preserved PAPER-only operation: READY_FOR_REVIEW is not execution permission, Agents/RM/Module M remain future gates.
+- Full suite: 52 tests passing.
+
+
 ## Version 0.2.0 / TM2-TGT1 — Trade Intake, Source Identity, Outcome and Episode
 
 - Added durable source observations with explicit `src_id` and provenance.
