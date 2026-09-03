@@ -1,4 +1,4 @@
-"""SQLite persistence foundation for TradeMonitor TM1/TGT1."""
+"""SQLite persistence foundation for TradeMonitor TM1."""
 
 from __future__ import annotations
 
@@ -45,5 +45,33 @@ class Database:
                     ON event_log(occurred_at);
                 CREATE INDEX IF NOT EXISTS idx_event_log_name
                     ON event_log(name);
+
+                CREATE TABLE IF NOT EXISTS positions (
+                    position_id TEXT PRIMARY KEY,
+                    broker TEXT NOT NULL,
+                    broker_position_key TEXT NOT NULL,
+                    exchange TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    product TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    average_price TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    management_status TEXT NOT NULL,
+                    origin TEXT NOT NULL,
+                    last_price TEXT,
+                    realized_pnl TEXT,
+                    unrealized_pnl TEXT,
+                    instrument_token TEXT,
+                    first_seen_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(broker, broker_position_key)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_positions_broker
+                    ON positions(broker);
+                CREATE INDEX IF NOT EXISTS idx_positions_state
+                    ON positions(state);
+                CREATE INDEX IF NOT EXISTS idx_positions_management_status
+                    ON positions(management_status);
                 """
             )

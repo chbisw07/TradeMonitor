@@ -1,9 +1,13 @@
 # Safety Invariants
 
-- No live order placement exists in TM0.
-- Broker reality is authoritative for order/position existence.
-- Hard risk controls must not be bypassed by an LLM.
-- Explicit user commands outrank advisory intelligence.
+- Broker reality is factual truth for broker order/position existence and quantity.
+- Nothing creating risk may eventually reach Module M without current Risk Management permission.
+- Risk Management cannot be bypassed by an ordinary User command or by advisory intelligence.
+- `UNMANAGED` positions are read-only to TradeMonitor until explicitly adopted.
+- Broker discovery never implies adoption.
+- Repeated/rediscovered exposure must never silently increase position size.
+- A missing broker acknowledgement must never be treated as proof that an order failed (execution work is deferred to TM4).
 - Experimental code must not silently change trading semantics.
-- AUTO mode must not be enabled until PAPER and SEMI_AUTO milestones are validated.
-- All future consequential state changes should be auditable/timestamped.
+- AUTO mode must not be enabled until PAPER and SEMI_AUTO evidence justifies it.
+- Consequential state changes and Risk Management blocks/interventions must be auditable/timestamped.
+- TM1/TGT2 contains no broker write operations.

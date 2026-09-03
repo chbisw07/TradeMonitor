@@ -1,4 +1,4 @@
-"""TradeMonitor TM1/TGT1 development application."""
+"""TradeMonitor TM1/TGT2 development application."""
 
 from __future__ import annotations
 
@@ -16,11 +16,19 @@ def build_manager(settings: Settings | None = None) -> CoreTMManager:
 
 
 def main() -> None:
-    """Start the PAPER-only TM1/TGT1 runtime and display its status."""
+    """Start the PAPER-only TM1/TGT2 runtime and display durable known state.
+
+    No broker adapter is auto-connected here. Real broker credentials/connectivity
+    are intentionally outside TGT2; broker reconciliation is invoked explicitly
+    through the read-only Broker contract.
+    """
     manager = build_manager()
     manager.start()
+    ui = ConsoleUI()
     try:
-        print(ConsoleUI().render_status(manager.status_snapshot()))
+        print(ui.render_status(manager.status_snapshot()))
+        print()
+        print(ui.render_positions(manager.positions_snapshot(open_only=True)))
     finally:
         manager.stop()
 

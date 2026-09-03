@@ -1,4 +1,4 @@
-"""Runtime settings for TradeMonitor TM1/TGT1."""
+"""Runtime settings for TradeMonitor TM1."""
 
 from __future__ import annotations
 

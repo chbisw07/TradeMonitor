@@ -1,5 +1,15 @@
 # Changelog
 
+## Version 0.1.1 / TM1-TGT2 — Broker Truth and Position Reconciliation
+
+- Added read-only broker account snapshot contract and deterministic MockBroker.
+- Added durable canonical Position records and broker truth reconciliation.
+- Added `MANAGED` / `UNMANAGED` management status and hard unmanaged read-only guard.
+- Added broker/position runtime summaries and reconciliation audit events.
+- Added restart/closure reconciliation and TGT2 acceptance tests.
+- Preserved zero broker write/live trading capability.
+
+
 ## Version 0.1.0 / TM1-TGT1
 
 - Added Core TM Manager coordination foundation

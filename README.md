@@ -10,22 +10,27 @@ The canonical design references are kept under `docs/`:
 
 ## Current Status
 
-**TM1 / TGT1 — Core TM Manager and Runtime Contexts**
+**TM1 / TGT2 — Broker Truth and Position Reconciliation**
 
-Implemented in this target:
+TM1/TGT1 is frozen. TGT2 adds the read-only broker-truth and durable position-reconciliation foundation:
 
-- Core TM Manager coordination foundation
-- canonical runtime contexts: broker, market, trade, position, risk, decision, health
-- explicit synchronous event bus
-- structured immutable runtime events
-- SQLite persistence for context snapshots and event audit records
-- restart/context restoration foundation
-- concise console status view
-- unit/integration tests for persistence, event flow, restart, and safety status
+- Core TM Manager and canonical runtime contexts
+- explicit synchronous event boundary and durable audit log
+- SQLite persistence/restart foundation
+- read-only Broker account snapshot contract
+- deterministic `MockBroker` for PAPER/integration validation
+- durable canonical broker positions
+- unified `MANAGED` / `UNMANAGED` management status
+- broker-discovered positions default to `UNMANAGED`
+- broker quantity/state is accepted as truth during reconciliation
+- existing management status/provenance is preserved
+- positions survive restart and are reconciled again to broker reality
+- unified console position/status view
+- hard `UNMANAGED` read-only guard
 
-**NO LIVE TRADING CAPABILITY EXISTS IN TM1/TGT1.**
+**NO LIVE TRADING CAPABILITY EXISTS IN TM1/TGT2.**
 
-Broker truth reconciliation, actual trade intake, Risk Management rules, Agent integration, position management, and Module M execution are later targets per the roadmap.
+Real broker authentication/adapters, adoption, Risk Management rules, trade intake/entry logic, Agents, position-management policies, Exit Monitor, and Module M execution are later targets per the roadmap.
 
 ## Development Setup
 

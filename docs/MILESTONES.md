@@ -11,6 +11,8 @@ The previous TM0 placeholder milestone list is superseded by the four-milestone 
 
 **TM1 — Core Foundation**
 
-Current target: **TGT1 — Core TM Manager and Runtime Contexts**
+Completed and frozen: **TGT1 — Core TM Manager and Runtime Contexts**
 
-TM1/TGT1 establishes the coordinating core, runtime contexts, persistence/restart foundation, structured event logging, and PAPER-only console status. It contains **no live broker execution capability**.
+Current target: **TGT2 — Broker Truth and Position Reconciliation**
+
+TM1/TGT2 establishes a read-only broker snapshot contract, durable broker-truth reconciliation, unified `MANAGED` / `UNMANAGED` positions, persistence across restart, and explicit enforcement of the unmanaged read-only boundary. It contains **no live broker write capability**.

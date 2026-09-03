@@ -2,30 +2,31 @@
 
 The canonical architecture is defined by the **TradeMonitor TM0 Architecture Thesis** and the **TradeMonitor Development Roadmap** in this `docs/` folder.
 
-## TM1/TGT1 Runtime Shape
+## Core Runtime
 
-TradeMonitor uses a small **Core TM Manager** as a coordinator rather than a master trading algorithm. The Core Manager synchronizes runtime contexts, routes events, supervises lifecycle coordination, persists state, and exposes a coherent operating picture.
+TradeMonitor uses a small **Core TM Manager** as a coordinator rather than a master trading algorithm. Domain modules own their specialist meaning; Core owns synchronization, durable coordination, event routing, and the coherent operating picture.
 
-Canonical runtime contexts introduced in TGT1:
+Canonical runtime contexts currently include Broker, Market, Trade, Position, Risk, Decision, and Health.
 
-- Broker
-- Market
-- Trade
-- Position
-- Risk
-- Decision
-- Health
+## TM1/TGT2 Broker Truth Boundary
 
-Domain modules own the meaning of their data. The Core Manager owns controlled synchronization and durable coordination.
+Broker reality is factual truth for broker orders/fills/positions. TGT2 introduces a strictly read-only Broker adapter that supplies one coherent account snapshot to the Core/Position domain.
 
-## Event Boundary
+The Position domain reconciles persisted state to broker truth. Broker-reported quantity/state wins. A broker position omitted from a coherent current snapshot is considered closed by broker reality.
 
-Runtime changes are represented by structured, auditable events. TGT1 uses a synchronous event bus so the architecture has an explicit communication boundary without prematurely committing to threads or processes.
+## Unified Positions
 
-## Persistence and Recovery
+There is one Position universe with an orthogonal management status:
 
-TGT1 persists runtime contexts and events in SQLite. On restart, the Core Manager restores the latest durable context. Broker-truth reconciliation is implemented in TM1/TGT2; TGT1 establishes the persistence/recovery foundation it will use.
+- `MANAGED` — TM has management authority (full behavior arrives in TM3).
+- `UNMANAGED` — visible/reconciled but a hard read-only boundary until explicit adoption.
+
+New positions discovered directly at the broker are always `UNMANAGED`. Origin/provenance is preserved separately from management status.
+
+## Event/Persistence Boundary
+
+Broker reconciliation produces structured position events and refreshes durable Broker/Position contexts. SQLite remains the TM1 persistence mechanism. The synchronous event bus remains an explicit communication boundary without prematurely choosing a threading/process architecture.
 
 ## Safety Boundary
 
-TM1/TGT1 has **NO LIVE TRADING CAPABILITY**. No code in this target submits, modifies, or cancels broker orders.
+TM1/TGT2 has **NO LIVE TRADING CAPABILITY**. The Broker contract in this target has no order submission, modification, cancellation, exit, hedge, or adoption method.
