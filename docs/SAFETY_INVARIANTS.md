@@ -27,3 +27,15 @@
 - Repeated identical failures should not create unbounded duplicate operator Attention.
 - Recovery may restore capability; failure may never silently increase authority.
 - TM1 remains PAPER-only and exposes no broker-write API.
+
+
+## TM2/TGT1 Intake Invariants
+
+- Source provenance is never discarded merely because observations reconcile to the same Outcome/Episode.
+- Outcome identity and time-relevant Episode identity remain separate.
+- Older/stale source observations may be retained for provenance but must not replace the currently relevant Episode.
+- Exact source observation replay must be idempotent.
+- Repeated/rediscovered signals never constitute add/scale-in permission.
+- Existing `MANAGED` or `UNMANAGED` broker exposure may influence intake awareness, but Intake has no authority to operate on that exposure.
+- Ambiguity delegation is through an explicit external-service port; TM core contains no Agents implementation.
+- TM2/TGT1 remains PAPER-only and exposes no broker-write path.

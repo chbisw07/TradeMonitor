@@ -10,29 +10,23 @@ The canonical design references are kept under `docs/`:
 
 ## Current Status
 
-**TM1 / TGT4 — PAPER Runtime, Recovery & Replay Validation**
+**TM2 / TGT1 — Trade Intake, Source Identity, Outcome and Episode**
 
-TM1/TGT1–TGT3 are frozen. TGT4 validates the complete TM1 PAPER runtime under recovery, replay, freshness, and degraded-mode scenarios:
+TM1 is frozen and complete. TM2/TGT1 adds the first entry-side domain capability while preserving the PAPER/read-only boundary:
 
-- Core TM Manager and canonical runtime contexts
-- explicit synchronous event boundary and durable audit log
-- SQLite persistence/restart foundation
-- read-only Broker account snapshot contract and broker-truth reconciliation
-- unified `MANAGED` / `UNMANAGED` positions
-- vertical nearest-owner fault containment and escalation
-- horizontal peer-domain fault isolation
-- domain health states and capability-specific impact reporting
-- durable operator Attention queue
-- unified control-room view for health, Positions, and Attention
-- PAPER mode made explicit; live execution remains disabled
-- stale/out-of-order broker observations cannot overwrite newer truth
-- exact event/snapshot replay is idempotent at the business-state boundary
-- ungraceful restart and broker-offline-change recovery are validated
-- repeated outage Attention is de-duplicated and resolved on recovery
+- immutable source observations with explicit `src_id`, source, datetime and provenance
+- normalized broad Outcome identity
+- time-relevant Episode identity for changing market/contract context
+- exact observation de-duplication and restart-safe persistence
+- same-source/different-outcome and different-source/same-outcome reconciliation
+- existing broker-position awareness without implicit scale-in
+- explicit bounded ambiguity-resolution port for the separate external Agents service
+- Core trade context receives only summarized intake counts; Intake remains domain owner
+- PAPER mode remains explicit; live execution remains disabled
 
-**NO LIVE TRADING CAPABILITY EXISTS IN TM1/TGT4.**
+**NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM2/TGT1.**
 
-Real broker authentication/adapters, adoption management, Risk Management policies, trade intake/entry logic, Agents integration, position-management policies, Exit Monitor, and Module M execution remain later roadmap targets.
+Entry trigger/confirmation logic, full Agent validation workflow, Risk Management entry gates, position-management policies, Exit Monitor, Module M, and real broker writes remain later roadmap targets.
 
 ## Development Setup
 

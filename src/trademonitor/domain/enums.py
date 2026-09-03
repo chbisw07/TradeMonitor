@@ -65,3 +65,37 @@ class PositionOrigin(StrEnum):
     TM_NATIVE = "TM_NATIVE"
     BROKER_ADOPTED = "BROKER_ADOPTED"
     BROKER_EXTERNAL = "BROKER_EXTERNAL"
+
+class EpisodeStatus(StrEnum):
+    """Lifecycle of a time-relevant manifestation of a broad trade outcome."""
+
+    ACTIVE = "ACTIVE"
+    SUPERSEDED = "SUPERSEDED"
+
+
+class EpisodeDecision(StrEnum):
+    """Result of reconciling an observation with an existing episode."""
+
+    SAME_EPISODE = "SAME_EPISODE"
+    NEW_EPISODE = "NEW_EPISODE"
+    STALE_OBSERVATION = "STALE_OBSERVATION"
+
+
+class IntakeDisposition(StrEnum):
+    """Operator/audit-friendly result of one intake observation."""
+
+    NEW_OUTCOME = "NEW_OUTCOME"
+    NEW_EPISODE = "NEW_EPISODE"
+    UPDATED_EPISODE = "UPDATED_EPISODE"
+    DUPLICATE_OBSERVATION = "DUPLICATE_OBSERVATION"
+    REDISCOVERED_EXISTING_EXPOSURE = "REDISCOVERED_EXISTING_EXPOSURE"
+    STALE_OBSERVATION = "STALE_OBSERVATION"
+
+
+class ExposureRelation(StrEnum):
+    """How an incoming opportunity relates to current broker-confirmed exposure."""
+
+    NONE = "NONE"
+    SAME_UNDERLYING = "SAME_UNDERLYING"
+    EXACT_CONTRACT = "EXACT_CONTRACT"
+

@@ -8,6 +8,7 @@ from threading import RLock
 from typing import Any
 
 from trademonitor.brokers.base import Broker
+from trademonitor.candidates.manager import TradeIntakeManager
 from trademonitor.core.attention import create_attention_item, resolve_attention_item
 from trademonitor.core.context import RuntimeContexts
 from trademonitor.core.event_bus import EventBus
@@ -15,7 +16,7 @@ from trademonitor.core.health import DomainHealthReport, FaultReport
 from trademonitor.core.recovery import FreshnessRelation, compare_observation_time, runtime_fingerprint
 from trademonitor.domain.enums import AttentionLevel, AttentionStatus, HealthStatus
 from trademonitor.domain.events import DomainEvent
-from trademonitor.domain.models import AttentionItem, PositionRecord
+from trademonitor.domain.models import AttentionItem, IntakeResult, NormalizedTradeIntent, PositionRecord
 from trademonitor.persistence.repository import RuntimeRepository
 from trademonitor.positions.manager import PositionManager
 
@@ -33,6 +34,9 @@ class CoreTMManager:
         self._event_bus = event_bus or EventBus()
         self._contexts = RuntimeContexts.empty()
         self._positions = PositionManager(repository)
+        self._intake = TradeIntakeManager(
+            repository, positions_provider=lambda: self._positions.list_positions(open_only=True)
+        )
         self._lock = RLock()
         self._started = False
 
@@ -94,6 +98,40 @@ class CoreTMManager:
             self._persist_all_contexts()
             self._record_event(DomainEvent.create("CORE_STOPPED", source="CORE"))
             self._started = False
+
+
+    def ingest_trade_observation(
+        self,
+        *,
+        src_id: str,
+        source: str,
+        observed_at: datetime,
+        intent: NormalizedTradeIntent,
+        raw_payload: dict[str, Any] | None = None,
+    ) -> IntakeResult:
+        """Coordinate one intake observation through the specialist Intake domain."""
+        with self._lock:
+            self._ensure_started()
+            result, events = self._intake.ingest(
+                src_id=src_id,
+                source=source,
+                observed_at=observed_at,
+                intent=intent,
+                raw_payload=raw_payload,
+            )
+            for event in events:
+                self._record_event(event)
+            counts = self._intake.snapshot()
+            trade = self._contexts.get("trade")
+            trade.patch({"intake": counts})
+            self._repository.save_context(trade.to_record())
+            return result
+
+    def intake_snapshot(self) -> dict[str, int]:
+        """Return durable intake counts without exposing persistence internals."""
+        with self._lock:
+            self._ensure_started()
+            return self._intake.snapshot()
 
     def patch_context(
         self,

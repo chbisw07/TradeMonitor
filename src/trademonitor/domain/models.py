@@ -7,7 +7,14 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Mapping
 
-from trademonitor.domain.enums import ManagementStatus, PositionOrigin, PositionState
+from trademonitor.domain.enums import (
+    EpisodeStatus,
+    ExposureRelation,
+    IntakeDisposition,
+    ManagementStatus,
+    PositionOrigin,
+    PositionState,
+)
 
 
 def utc_now() -> datetime:
@@ -285,3 +292,216 @@ class AttentionItem:
             created_at=datetime.fromisoformat(str(record["created_at"])),
             resolved_at=datetime.fromisoformat(str(resolved)) if resolved else None,
         )
+
+@dataclass(frozen=True)
+class NormalizedTradeIntent:
+    """Normalized, broad trading intent used for intake identity.
+
+    Outcome identity deliberately excludes contract-specific/market-time values such
+    as strike, expiry, premium and reference price. Those values belong to the
+    time-relevant Episode manifestation of the broader opportunity.
+    """
+
+    underlying: str
+    direction: str
+    setup: str
+    trade_type: str | None = None
+    instrument_type: str | None = None
+    option_type: str | None = None
+    contract_symbol: str | None = None
+    expiry: str | None = None
+    strike: str | None = None
+    premium: str | None = None
+    reference_price: str | None = None
+    context_key: str | None = None
+
+    def __post_init__(self) -> None:
+        for field_name in ("underlying", "direction", "setup"):
+            value = str(getattr(self, field_name)).strip()
+            if not value:
+                raise ValueError(f"{field_name} is required")
+            object.__setattr__(self, field_name, value.upper())
+        for field_name in ("trade_type", "instrument_type", "option_type"):
+            value = getattr(self, field_name)
+            if value is not None:
+                object.__setattr__(self, field_name, str(value).strip().upper() or None)
+        if self.contract_symbol is not None:
+            object.__setattr__(self, "contract_symbol", str(self.contract_symbol).strip().upper() or None)
+
+    def outcome_identity(self) -> dict[str, str | None]:
+        return {
+            "underlying": self.underlying,
+            "direction": self.direction,
+            "setup": self.setup,
+            "trade_type": self.trade_type,
+            "instrument_type": self.instrument_type,
+            "option_type": self.option_type,
+        }
+
+    def episode_identity(self) -> dict[str, str | None]:
+        return {
+            "contract_symbol": self.contract_symbol,
+            "expiry": self.expiry,
+            "strike": self.strike,
+            "context_key": self.context_key,
+        }
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            **self.outcome_identity(),
+            "contract_symbol": self.contract_symbol,
+            "expiry": self.expiry,
+            "strike": self.strike,
+            "premium": self.premium,
+            "reference_price": self.reference_price,
+            "context_key": self.context_key,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "NormalizedTradeIntent":
+        return cls(**{key: record.get(key) for key in (
+            "underlying", "direction", "setup", "trade_type", "instrument_type",
+            "option_type", "contract_symbol", "expiry", "strike", "premium",
+            "reference_price", "context_key"
+        )})
+
+
+@dataclass(frozen=True)
+class SourceObservation:
+    """One immutable intake observation from Scanner, Sheet, User, Agents, etc."""
+
+    observation_id: str
+    src_id: str
+    source: str
+    observed_at: datetime
+    intent: NormalizedTradeIntent
+    raw_payload: Mapping[str, Any] = field(default_factory=dict)
+    dedupe_key: str = ""
+    outcome_id: str | None = None
+    episode_id: str | None = None
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "observation_id": self.observation_id,
+            "src_id": self.src_id,
+            "source": self.source,
+            "observed_at": self.observed_at.isoformat(),
+            "intent": self.intent.to_record(),
+            "raw_payload": dict(self.raw_payload),
+            "dedupe_key": self.dedupe_key,
+            "outcome_id": self.outcome_id,
+            "episode_id": self.episode_id,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "SourceObservation":
+        return cls(
+            observation_id=str(record["observation_id"]),
+            src_id=str(record["src_id"]),
+            source=str(record["source"]),
+            observed_at=datetime.fromisoformat(str(record["observed_at"])),
+            intent=NormalizedTradeIntent.from_record(record["intent"]),
+            raw_payload=dict(record.get("raw_payload", {})),
+            dedupe_key=str(record.get("dedupe_key", "")),
+            outcome_id=record.get("outcome_id"),
+            episode_id=record.get("episode_id"),
+        )
+
+
+@dataclass(frozen=True)
+class OutcomeRecord:
+    """Broad opportunity identity shared by one or more time-relevant Episodes."""
+
+    outcome_id: str
+    outcome_key: str
+    identity: Mapping[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "outcome_id": self.outcome_id,
+            "outcome_key": self.outcome_key,
+            "identity": dict(self.identity),
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "OutcomeRecord":
+        return cls(
+            outcome_id=str(record["outcome_id"]),
+            outcome_key=str(record["outcome_key"]),
+            identity=dict(record["identity"]),
+            created_at=datetime.fromisoformat(str(record["created_at"])),
+            updated_at=datetime.fromisoformat(str(record["updated_at"])),
+        )
+
+
+@dataclass(frozen=True)
+class EpisodeRecord:
+    """Time-relevant manifestation of an Outcome in a particular market context."""
+
+    episode_id: str
+    outcome_id: str
+    signature: Mapping[str, Any]
+    status: EpisodeStatus
+    started_at: datetime
+    last_observed_at: datetime
+    latest_observation_id: str
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "episode_id": self.episode_id,
+            "outcome_id": self.outcome_id,
+            "signature": dict(self.signature),
+            "status": self.status.value,
+            "started_at": self.started_at.isoformat(),
+            "last_observed_at": self.last_observed_at.isoformat(),
+            "latest_observation_id": self.latest_observation_id,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "EpisodeRecord":
+        return cls(
+            episode_id=str(record["episode_id"]),
+            outcome_id=str(record["outcome_id"]),
+            signature=dict(record.get("signature", {})),
+            status=EpisodeStatus(str(record["status"])),
+            started_at=datetime.fromisoformat(str(record["started_at"])),
+            last_observed_at=datetime.fromisoformat(str(record["last_observed_at"])),
+            latest_observation_id=str(record["latest_observation_id"]),
+        )
+
+
+@dataclass(frozen=True)
+class ExistingExposure:
+    """Read-only awareness of broker-confirmed exposure related to an intake idea."""
+
+    relation: ExposureRelation
+    position_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class IntakeResult:
+    """Result returned by the Trade Intake domain for one observation."""
+
+    disposition: IntakeDisposition
+    observation: SourceObservation
+    outcome: OutcomeRecord
+    episode: EpisodeRecord
+    existing_exposure: ExistingExposure
+    reason: str
+
+    @property
+    def creates_new_operational_path(self) -> bool:
+        """Only a genuinely new opportunity/Episode can open a new downstream path.
+
+        Replays, updates, stale observations and exposure rediscovery are context/provenance
+        updates, never implicit add/scale-in permission.
+        """
+        return (
+            self.existing_exposure.relation == ExposureRelation.NONE
+            and self.disposition in {IntakeDisposition.NEW_OUTCOME, IntakeDisposition.NEW_EPISODE}
+        )
+

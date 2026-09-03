@@ -1,4 +1,4 @@
-"""TradeMonitor TM1/TGT4 development application."""
+"""TradeMonitor TM2/TGT1 development application."""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ def build_manager(settings: Settings | None = None) -> CoreTMManager:
 
 
 def main() -> None:
-    """Start the PAPER-only TM1/TGT4 control-room runtime.
+    """Start the PAPER-only TM2/TGT1 control-room runtime.
 
     No broker adapter is auto-connected. Real broker credentials/connectivity and
-    all broker writes remain outside TM1/TGT4.
+    all broker writes remain outside TM2/TGT1.
     """
     manager = build_manager()
     manager.start()

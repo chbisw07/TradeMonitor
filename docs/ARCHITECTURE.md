@@ -52,3 +52,8 @@ TM1/TGT3 remains PAPER-only and broker-read-only.
 TM1 recovery is state-convergent rather than action-replaying. Persisted contexts are restored, then newer external facts—especially broker truth—are reconciled. Older or already-accepted broker observations cannot roll state backward. Exact duplicate events are harmless through event-ID idempotency. Replay/audit activity may add log records, but must not manufacture new broker exposure or change the `MANAGED` / `UNMANAGED` boundary.
 
 A stable business-state fingerprint is used by replay validation to distinguish semantic state from bookkeeping timestamps and context-version increments.
+
+
+## TM2/TGT1 intake identity
+
+Trade intake separates three questions: **Source Observation** (who/what said it and when), **Outcome** (the broad trading idea), and **Episode** (the currently relevant manifestation of that Outcome in market time/contract context). Candidate remains an operational/UI notion rather than another heavy domain entity. Clear reconciliation is deterministic. A genuinely ambiguous same-Outcome Episode question may be delegated through a bounded interface to the separate external Agents service; ownership returns to Intake. Existing broker-confirmed exposure is awareness only and repeated signals never imply scale-in.

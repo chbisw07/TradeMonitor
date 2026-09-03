@@ -20,6 +20,12 @@ Completed and frozen:
 
 TM1 is complete in this working tree. TGT4 validates restart/recovery, stale and replayed broker observations, duplicate-event tolerance, broker degraded→healthy recovery, persistent auditability, and the hard PAPER/read-only safety boundary.
 
-Next roadmap milestone after TM1 acceptance/freeze:
+Current implementation target:
 
-- **TM2 / TGT1 — Trade Intake, Source Identity, Outcome and Episode**
+- **TM2 / TGT1 — Trade Intake, Source Identity, Outcome and Episode — COMPLETE IN THIS WORKING TREE**
+
+TM2/TGT1 adds durable source observations, broad Outcome identity, time-relevant Episodes, temporal/contract-context reconciliation, de-duplication, existing-exposure awareness, and a bounded external ambiguity-resolution port. See `TM2_TGT1_ACCEPTANCE.md`.
+
+Next roadmap target after acceptance/freeze:
+
+- **TM2 / TGT2 — Entry Monitoring and Trade Intent**

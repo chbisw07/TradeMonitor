@@ -73,5 +73,46 @@ class Database:
                     ON positions(state);
                 CREATE INDEX IF NOT EXISTS idx_positions_management_status
                     ON positions(management_status);
+
+                CREATE TABLE IF NOT EXISTS intake_outcomes (
+                    outcome_id TEXT PRIMARY KEY,
+                    outcome_key TEXT NOT NULL UNIQUE,
+                    identity_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS intake_episodes (
+                    episode_id TEXT PRIMARY KEY,
+                    outcome_id TEXT NOT NULL,
+                    signature_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    last_observed_at TEXT NOT NULL,
+                    latest_observation_id TEXT NOT NULL,
+                    FOREIGN KEY(outcome_id) REFERENCES intake_outcomes(outcome_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_intake_episodes_outcome_status
+                    ON intake_episodes(outcome_id, status);
+
+                CREATE TABLE IF NOT EXISTS source_observations (
+                    observation_id TEXT PRIMARY KEY,
+                    dedupe_key TEXT NOT NULL UNIQUE,
+                    src_id TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    observed_at TEXT NOT NULL,
+                    intent_json TEXT NOT NULL,
+                    raw_payload_json TEXT NOT NULL,
+                    outcome_id TEXT NOT NULL,
+                    episode_id TEXT NOT NULL,
+                    FOREIGN KEY(outcome_id) REFERENCES intake_outcomes(outcome_id),
+                    FOREIGN KEY(episode_id) REFERENCES intake_episodes(episode_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_source_observations_src_id
+                    ON source_observations(src_id);
+                CREATE INDEX IF NOT EXISTS idx_source_observations_outcome
+                    ON source_observations(outcome_id, observed_at);
                 """
             )

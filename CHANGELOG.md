@@ -1,5 +1,16 @@
 # Changelog
 
+## Version 0.2.0 / TM2-TGT1 — Trade Intake, Source Identity, Outcome and Episode
+
+- Added durable source observations with explicit `src_id` and provenance.
+- Added normalized broad Outcome identity and time-relevant Episode identity.
+- Added deterministic temporal/contract-context reconciliation and exact observation de-duplication.
+- Added optional bounded ambiguity-resolution port for the separate external Agents service.
+- Added existing-position awareness; rediscovery never creates scale-in permission.
+- Added restart-safe intake persistence and Core trade-context summary integration.
+- Added TM2/TGT1 acceptance tests while preserving PAPER-only/no-broker-write safety.
+
+
 ## Version 0.1.3 / TM1-TGT4 — PAPER Runtime, Recovery and Replay Validation
 
 - Added stale/replayed broker snapshot classification and rejection of out-of-order truth.
