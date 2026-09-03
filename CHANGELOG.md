@@ -1,3 +1,14 @@
+## 0.2.2 — TM2/TGT3
+
+- Added external Agents-service gateway contract for entry validation.
+- Added durable Agent review packets/results and audit history.
+- Added mandatory `APPROVE / REJECT / RETREAT_WAIT` verdict handling.
+- Added User escalation for Agent disagreement or unavailability.
+- Added `READY_FOR_RISK` as the post-validation handoff state; no RM or execution logic is implemented yet.
+- Preserved optional Agent suggestions as non-authoritative advice.
+- Added restart-safe review/attention persistence and tests.
+- No broker-write/live-trading capability added.
+
 # Changelog
 
 ## Version 0.2.1 / TM2-TGT2 — Entry Monitoring and Trade Intent

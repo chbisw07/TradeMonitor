@@ -43,7 +43,21 @@ class EntryMonitor:
         snapshot: EntryMarketSnapshot,
     ) -> tuple[EntryIntentRecord, list[DomainEvent]]:
         current = self._require(entry_intent_id)
-        if current.state in {EntryIntentState.INVALIDATED, EntryIntentState.EXPIRED, EntryIntentState.CANCELLED}:
+        if current.state in {
+            EntryIntentState.REJECTED,
+            EntryIntentState.INVALIDATED,
+            EntryIntentState.EXPIRED,
+            EntryIntentState.CANCELLED,
+        }:
+            return current, []
+
+        # Review/Risk handoff states are owned by later gates; market ticks must not
+        # silently move them back into entry monitoring.
+        if current.state in {
+            EntryIntentState.AGENT_REVIEW_PENDING,
+            EntryIntentState.USER_DECISION_PENDING,
+            EntryIntentState.READY_FOR_RISK,
+        }:
             return current, []
 
         # Time/contract boundaries are checked before price logic.

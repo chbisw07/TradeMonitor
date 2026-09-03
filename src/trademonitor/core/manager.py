@@ -7,6 +7,7 @@ from datetime import datetime
 from threading import RLock
 from typing import Any
 
+from trademonitor.agents.gateway import AgentGateway
 from trademonitor.brokers.base import Broker
 from trademonitor.candidates.manager import TradeIntakeManager
 from trademonitor.core.attention import create_attention_item, resolve_attention_item
@@ -14,10 +15,20 @@ from trademonitor.core.context import RuntimeContexts
 from trademonitor.core.event_bus import EventBus
 from trademonitor.core.health import DomainHealthReport, FaultReport
 from trademonitor.core.recovery import FreshnessRelation, compare_observation_time, runtime_fingerprint
-from trademonitor.domain.enums import AttentionLevel, AttentionStatus, HealthStatus
+from trademonitor.domain.enums import AgentVerdict, AttentionLevel, AttentionStatus, EntryIntentState, HealthStatus
 from trademonitor.domain.events import DomainEvent
-from trademonitor.domain.models import AttentionItem, EntryIntentRecord, EntryMarketSnapshot, EpisodeRecord, IntakeResult, NormalizedTradeIntent, PositionRecord
+from trademonitor.domain.models import (
+    AttentionItem,
+    EntryIntentRecord,
+    EntryMarketSnapshot,
+    EntryReviewRecord,
+    EpisodeRecord,
+    IntakeResult,
+    NormalizedTradeIntent,
+    PositionRecord,
+)
 from trademonitor.entry.monitor import EntryMonitor
+from trademonitor.entry.review import EntryReviewCoordinator
 from trademonitor.persistence.repository import RuntimeRepository
 from trademonitor.positions.manager import PositionManager
 
@@ -39,6 +50,7 @@ class CoreTMManager:
             repository, positions_provider=lambda: self._positions.list_positions(open_only=True)
         )
         self._entry = EntryMonitor(repository)
+        self._entry_review = EntryReviewCoordinator(repository)
         self._lock = RLock()
         self._started = False
 
@@ -170,6 +182,77 @@ class CoreTMManager:
         with self._lock:
             self._ensure_started()
             return self._entry.list_active()
+
+    def request_entry_agent_review(
+        self,
+        entry_intent_id: str,
+        gateway: AgentGateway,
+        *,
+        requested_at: datetime | None = None,
+    ) -> EntryIntentRecord:
+        """Ask the separate Agents service to independently validate a ready entry.
+
+        APPROVE advances only to READY_FOR_RISK. REJECT/RETREAT_WAIT or service
+        failure creates a User decision point. No execution/Risk action occurs here.
+        """
+        with self._lock:
+            self._ensure_started()
+            intent, review, events = self._entry_review.request_review(
+                entry_intent_id, gateway, requested_at=requested_at
+            )
+            for event in events:
+                self._record_event(event)
+            if intent.state == EntryIntentState.USER_DECISION_PENDING:
+                verdict = (
+                    review.result.verdict.value
+                    if review.result is not None
+                    else "AGENT_UNAVAILABLE"
+                )
+                suggestion = (
+                    f" Suggestion: {review.result.suggestion}"
+                    if review.result is not None and review.result.suggestion
+                    else ""
+                )
+                self.add_attention(
+                    level=AttentionLevel.ATTENTION,
+                    source="ENTRY",
+                    title=f"User decision required: {entry_intent_id}",
+                    detail=(
+                        f"Agents outcome={verdict}. Choose APPROVE / REJECT / "
+                        f"RETREAT_WAIT for this entry.{suggestion}"
+                    ),
+                )
+            self._refresh_entry_context()
+            return intent
+
+    def resolve_entry_agent_decision(
+        self,
+        entry_intent_id: str,
+        decision: AgentVerdict | str,
+        *,
+        at: datetime,
+        reason: str,
+    ) -> EntryIntentRecord:
+        """Record the User's higher-authority decision after Agent disagreement."""
+        with self._lock:
+            self._ensure_started()
+            intent, _review, events = self._entry_review.resolve_user_decision(
+                entry_intent_id, decision, at=at, reason=reason
+            )
+            for event in events:
+                self._record_event(event)
+            self._resolve_matching_attention(
+                source="ENTRY", title=f"User decision required: {entry_intent_id}"
+            )
+            self._refresh_entry_context()
+            return intent
+
+    def entry_review_snapshot(
+        self, *, entry_intent_id: str | None = None
+    ) -> list[EntryReviewRecord]:
+        with self._lock:
+            self._ensure_started()
+            return self._entry_review.list_reviews(entry_intent_id=entry_intent_id)
 
     def patch_context(
         self,
@@ -576,8 +659,17 @@ class CoreTMManager:
         counts: dict[str, int] = {}
         for item in active:
             counts[item.state.value] = counts.get(item.state.value, 0) + 1
+        reviews = self._entry_review.list_reviews()
+        review_counts: dict[str, int] = {}
+        for review in reviews:
+            review_counts[review.status.value] = review_counts.get(review.status.value, 0) + 1
         trade = self._contexts.get("trade")
-        trade.patch({"entry_monitoring": {"active": len(active), "by_state": counts}})
+        trade.patch(
+            {
+                "entry_monitoring": {"active": len(active), "by_state": counts},
+                "entry_agent_reviews": {"total": len(reviews), "by_status": review_counts},
+            }
+        )
         self._repository.save_context(trade.to_record())
 
     def _refresh_position_context(self, *, source: str | None = None) -> None:

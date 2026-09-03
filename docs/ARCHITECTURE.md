@@ -62,3 +62,11 @@ Trade intake separates three questions: **Source Observation** (who/what said it
 ## TM2/TGT2 entry monitoring
 
 A time-relevant Episode may be admitted into the Entry domain as a durable Entry Intent. The Entry domain owns deterministic trigger, optional completed-candle confirmation, underlying invalidation, horizon/expiry boundaries, and current contract-premium revalidation. `RETREAT_WAIT` is a deliberate reversible state and requires rearm before another cycle. `READY_FOR_REVIEW` is only a handoff point for later validation; it is not execution permission. Entry monitoring does not call Module M and does not write to the broker.
+
+## TM2/TGT3 External Agents Validation Boundary
+
+The Agents capability is a **separate external service**. TradeMonitor owns only the gateway contract and the calling workflow. The Entry domain delegates a bounded validation task after deterministic entry monitoring reaches `READY_FOR_REVIEW`; control always returns to the Entry domain.
+
+`APPROVE` advances to `READY_FOR_RISK`. `REJECT` and `RETREAT_WAIT` are lower-authority opinions and therefore escalate to the User. An optional Agent suggestion is advice only and must re-enter normal TM evaluation if pursued. Agent failure is never treated as approval.
+
+Agents cannot mutate TM state directly, cannot call Module M, cannot access broker execution, and cannot bypass Risk Management.

@@ -126,5 +126,17 @@ class Database:
 
                 CREATE INDEX IF NOT EXISTS idx_entry_intents_episode_state
                     ON entry_intents(episode_id, state);
+
+                CREATE TABLE IF NOT EXISTS entry_reviews (
+                    review_id TEXT PRIMARY KEY,
+                    entry_intent_id TEXT NOT NULL,
+                    record_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(entry_intent_id) REFERENCES entry_intents(entry_intent_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_entry_reviews_intent_updated
+                    ON entry_reviews(entry_intent_id, updated_at);
                 """
             )

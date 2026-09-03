@@ -30,3 +30,7 @@ TM2/TGT2 adds durable entry intents, trigger/confirmation monitoring, RETREAT_WA
 Next roadmap target after acceptance/freeze:
 
 - **TM2 / TGT3 — External Agents Validation Gate**
+
+## TM2/TGT3 — External Agents Validation Gate — IMPLEMENTED
+
+Implemented the separate external Agents-service boundary, mandatory tri-state verdict, User escalation on disagreement/unavailability, durable audit/restart behavior, and post-review `READY_FOR_RISK` handoff. Risk Management remains TM2/TGT4.

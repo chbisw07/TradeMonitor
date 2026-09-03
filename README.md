@@ -48,3 +48,15 @@ By default the runtime database is stored at `data/trademonitor.db`. Override it
 ```bash
 TM_DATABASE_PATH=/tmp/trademonitor.db python scripts/run_dev.py
 ```
+
+## TM2/TGT3 — External Agents Validation Gate
+
+TradeMonitor now supports a bounded entry-validation handoff to a **separate external Agents service**. The Entry domain sends a structured review packet only after deterministic entry monitoring reaches `READY_FOR_REVIEW`. Agents must return exactly one verdict: `APPROVE`, `REJECT`, or `RETREAT_WAIT`, with an optional suggestion.
+
+- `APPROVE` advances the entry only to `READY_FOR_RISK`.
+- `REJECT` or `RETREAT_WAIT` never silently decides the trade; they escalate to the User, who chooses `APPROVE`, `REJECT`, or `RETREAT_WAIT`.
+- Agent failure/unavailability also escalates to the User and never implies approval.
+- Suggestions are persisted as advice only; they cannot create broker actions or bypass the normal Entry/Risk flow.
+- Agents do not own TradeMonitor state and have no access to Module M or broker execution.
+
+**There is still no live broker-write capability in TM2/TGT3.**

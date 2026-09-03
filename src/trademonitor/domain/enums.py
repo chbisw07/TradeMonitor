@@ -131,9 +131,29 @@ class EntryIntentState(StrEnum):
     CONFIRMING = "CONFIRMING"
     RETREAT_WAIT = "RETREAT_WAIT"
     READY_FOR_REVIEW = "READY_FOR_REVIEW"
+    AGENT_REVIEW_PENDING = "AGENT_REVIEW_PENDING"
+    USER_DECISION_PENDING = "USER_DECISION_PENDING"
+    READY_FOR_RISK = "READY_FOR_RISK"
+    REJECTED = "REJECTED"
     INVALIDATED = "INVALIDATED"
     EXPIRED = "EXPIRED"
     CANCELLED = "CANCELLED"
+
+
+class AgentVerdict(StrEnum):
+    """Mandatory verdict returned by the external Agents service."""
+
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+    RETREAT_WAIT = "RETREAT_WAIT"
+
+
+class AgentReviewStatus(StrEnum):
+    """Lifecycle of an external entry validation request."""
+
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
 
 class ConditionOperator(StrEnum):

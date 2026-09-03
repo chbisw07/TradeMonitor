@@ -660,7 +660,12 @@ class EntryIntentRecord:
     @property
     def active(self) -> bool:
         from trademonitor.domain.enums import EntryIntentState
-        return self.state not in {EntryIntentState.INVALIDATED, EntryIntentState.EXPIRED, EntryIntentState.CANCELLED}
+        return self.state not in {
+            EntryIntentState.REJECTED,
+            EntryIntentState.INVALIDATED,
+            EntryIntentState.EXPIRED,
+            EntryIntentState.CANCELLED,
+        }
 
     def to_record(self) -> dict[str, Any]:
         return {
@@ -715,4 +720,208 @@ class EntryIntentRecord:
             last_spot=record.get("last_spot"),
             last_premium=record.get("last_premium"),
             last_reason=record.get("last_reason"),
+        )
+
+
+@dataclass(frozen=True)
+class AgentEntryReviewPacket:
+    """Bounded entry-decision packet sent to the external Agents service.
+
+    The packet carries only the current proposed trade facts needed for independent
+    validation. It is not an ExecutionRequest and grants no execution authority.
+    """
+
+    review_id: str
+    entry_intent_id: str
+    episode_id: str
+    requested_at: datetime
+    underlying: str
+    direction: str
+    trade_type: str
+    asset_class: str
+    instrument_type: str
+    horizon_at: datetime
+    expiry_date: date | None
+    contract_symbol: str | None
+    option_type: str | None
+    strike: str | None
+    trigger: Mapping[str, Any]
+    confirmation: Mapping[str, Any] | None
+    invalidation: Mapping[str, Any] | None
+    premium_min: Decimal | None
+    premium_max: Decimal | None
+    current_spot: Decimal | None
+    current_premium: Decimal | None
+    readiness_reason: str | None
+
+    @classmethod
+    def from_entry_intent(
+        cls, *, review_id: str, requested_at: datetime, intent: "EntryIntentRecord"
+    ) -> "AgentEntryReviewPacket":
+        return cls(
+            review_id=review_id,
+            entry_intent_id=intent.entry_intent_id,
+            episode_id=intent.episode_id,
+            requested_at=requested_at,
+            underlying=intent.underlying,
+            direction=intent.direction,
+            trade_type=intent.trade_type.value,
+            asset_class=intent.asset_class.value,
+            instrument_type=intent.instrument_type.value,
+            horizon_at=intent.horizon_at,
+            expiry_date=intent.expiry_date,
+            contract_symbol=intent.contract_symbol,
+            option_type=intent.option_type,
+            strike=intent.strike,
+            trigger=intent.trigger.to_record(),
+            confirmation=None if intent.confirmation is None else intent.confirmation.to_record(),
+            invalidation=None if intent.invalidation is None else intent.invalidation.to_record(),
+            premium_min=intent.premium_min,
+            premium_max=intent.premium_max,
+            current_spot=intent.last_spot,
+            current_premium=intent.last_premium,
+            readiness_reason=intent.last_reason,
+        )
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "review_id": self.review_id,
+            "entry_intent_id": self.entry_intent_id,
+            "episode_id": self.episode_id,
+            "requested_at": self.requested_at.isoformat(),
+            "underlying": self.underlying,
+            "direction": self.direction,
+            "trade_type": self.trade_type,
+            "asset_class": self.asset_class,
+            "instrument_type": self.instrument_type,
+            "horizon_at": self.horizon_at.isoformat(),
+            "expiry_date": None if self.expiry_date is None else self.expiry_date.isoformat(),
+            "contract_symbol": self.contract_symbol,
+            "option_type": self.option_type,
+            "strike": self.strike,
+            "trigger": dict(self.trigger),
+            "confirmation": None if self.confirmation is None else dict(self.confirmation),
+            "invalidation": None if self.invalidation is None else dict(self.invalidation),
+            "premium_min": None if self.premium_min is None else str(self.premium_min),
+            "premium_max": None if self.premium_max is None else str(self.premium_max),
+            "current_spot": None if self.current_spot is None else str(self.current_spot),
+            "current_premium": None if self.current_premium is None else str(self.current_premium),
+            "readiness_reason": self.readiness_reason,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "AgentEntryReviewPacket":
+        return cls(
+            review_id=str(record["review_id"]),
+            entry_intent_id=str(record["entry_intent_id"]),
+            episode_id=str(record["episode_id"]),
+            requested_at=datetime.fromisoformat(str(record["requested_at"])),
+            underlying=str(record["underlying"]),
+            direction=str(record["direction"]),
+            trade_type=str(record["trade_type"]),
+            asset_class=str(record["asset_class"]),
+            instrument_type=str(record["instrument_type"]),
+            horizon_at=datetime.fromisoformat(str(record["horizon_at"])),
+            expiry_date=None if record.get("expiry_date") is None else date.fromisoformat(str(record["expiry_date"])),
+            contract_symbol=record.get("contract_symbol"),
+            option_type=record.get("option_type"),
+            strike=record.get("strike"),
+            trigger=dict(record["trigger"]),
+            confirmation=None if record.get("confirmation") is None else dict(record["confirmation"]),
+            invalidation=None if record.get("invalidation") is None else dict(record["invalidation"]),
+            premium_min=_decimal(record.get("premium_min")),
+            premium_max=_decimal(record.get("premium_max")),
+            current_spot=_decimal(record.get("current_spot")),
+            current_premium=_decimal(record.get("current_premium")),
+            readiness_reason=record.get("readiness_reason"),
+        )
+
+
+@dataclass(frozen=True)
+class AgentEntryReviewResult:
+    """Structured result returned by the external Agents service."""
+
+    review_id: str
+    verdict: "AgentVerdict"
+    reason: str
+    confidence: int | None = None
+    suggestion: str | None = None
+    responded_at: datetime = None  # type: ignore[assignment]
+
+    def __init__(
+        self, *, review_id: str, verdict, reason: str, confidence: int | None = None,
+        suggestion: str | None = None, responded_at: datetime | None = None
+    ) -> None:
+        from trademonitor.domain.enums import AgentVerdict
+        if confidence is not None and not 0 <= int(confidence) <= 100:
+            raise ValueError("confidence must be between 0 and 100")
+        object.__setattr__(self, "review_id", review_id)
+        object.__setattr__(self, "verdict", AgentVerdict(verdict))
+        object.__setattr__(self, "reason", reason.strip())
+        object.__setattr__(self, "confidence", None if confidence is None else int(confidence))
+        object.__setattr__(self, "suggestion", suggestion.strip() if suggestion else None)
+        object.__setattr__(self, "responded_at", responded_at or utc_now())
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "review_id": self.review_id,
+            "verdict": self.verdict.value,
+            "reason": self.reason,
+            "confidence": self.confidence,
+            "suggestion": self.suggestion,
+            "responded_at": self.responded_at.isoformat(),
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "AgentEntryReviewResult":
+        return cls(
+            review_id=str(record["review_id"]),
+            verdict=record["verdict"],
+            reason=str(record.get("reason", "")),
+            confidence=record.get("confidence"),
+            suggestion=record.get("suggestion"),
+            responded_at=datetime.fromisoformat(str(record["responded_at"])),
+        )
+
+
+@dataclass(frozen=True)
+class EntryReviewRecord:
+    """Durable audit record for one external Agent validation cycle."""
+
+    review_id: str
+    entry_intent_id: str
+    packet: AgentEntryReviewPacket
+    status: "AgentReviewStatus"
+    created_at: datetime
+    updated_at: datetime
+    result: AgentEntryReviewResult | None = None
+    user_decision: "AgentVerdict | None" = None
+    user_reason: str | None = None
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "review_id": self.review_id,
+            "entry_intent_id": self.entry_intent_id,
+            "packet": self.packet.to_record(),
+            "status": self.status.value,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "result": None if self.result is None else self.result.to_record(),
+            "user_decision": None if self.user_decision is None else self.user_decision.value,
+            "user_reason": self.user_reason,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "EntryReviewRecord":
+        from trademonitor.domain.enums import AgentReviewStatus, AgentVerdict
+        return cls(
+            review_id=str(record["review_id"]),
+            entry_intent_id=str(record["entry_intent_id"]),
+            packet=AgentEntryReviewPacket.from_record(record["packet"]),
+            status=AgentReviewStatus(record["status"]),
+            created_at=datetime.fromisoformat(str(record["created_at"])),
+            updated_at=datetime.fromisoformat(str(record["updated_at"])),
+            result=None if record.get("result") is None else AgentEntryReviewResult.from_record(record["result"]),
+            user_decision=None if record.get("user_decision") is None else AgentVerdict(record["user_decision"]),
+            user_reason=record.get("user_reason"),
         )

@@ -50,3 +50,12 @@
 - A `RETREAT_WAIT` intent does not silently rearm itself.
 - Repeated/re-discovered opportunity input does not imply scale-in.
 - Nothing creating risk reaches Module M without current Risk Management permission.
+
+## TM2/TGT3 Agent-Gate Invariants
+
+- Agents are lower authority than the User and Risk Management.
+- Agent `APPROVE` is not execution permission; it only permits progression to the Risk gate.
+- Agent `REJECT` / `RETREAT_WAIT` requires User resolution for the submitted entry.
+- Agent unavailability, malformed response, or correlation failure must never become implicit approval.
+- Agent suggestions are non-authoritative and cannot directly create or modify broker exposure.
+- No path from Agents reaches Module M directly.

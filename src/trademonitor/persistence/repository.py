@@ -7,7 +7,14 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import Any
 
-from trademonitor.domain.models import EntryIntentRecord, EpisodeRecord, OutcomeRecord, PositionRecord, SourceObservation
+from trademonitor.domain.models import (
+    EntryIntentRecord,
+    EntryReviewRecord,
+    EpisodeRecord,
+    OutcomeRecord,
+    PositionRecord,
+    SourceObservation,
+)
 from trademonitor.persistence.database import Database
 
 
@@ -73,6 +80,18 @@ class RuntimeRepository(ABC):
 
     @abstractmethod
     def list_entry_intents(self, *, active_only: bool = False) -> list[EntryIntentRecord]: ...
+
+    @abstractmethod
+    def save_entry_review(self, record: Mapping[str, Any]) -> None: ...
+
+    @abstractmethod
+    def get_entry_review(self, review_id: str) -> EntryReviewRecord | None: ...
+
+    @abstractmethod
+    def get_latest_entry_review(self, entry_intent_id: str) -> EntryReviewRecord | None: ...
+
+    @abstractmethod
+    def list_entry_reviews(self, *, entry_intent_id: str | None = None) -> list[EntryReviewRecord]: ...
 
 
 # Backward-compatible name retained from TM0 skeleton.
@@ -398,11 +417,11 @@ class SQLiteRuntimeRepository(RuntimeRepository):
         return self._entry_intent_from_row(row)
 
     def get_active_entry_intent_for_episode(self, episode_id: str) -> EntryIntentRecord | None:
-        terminal = ("INVALIDATED", "EXPIRED", "CANCELLED")
+        terminal = ("REJECTED", "INVALIDATED", "EXPIRED", "CANCELLED")
         with self._database.connect() as connection:
             row = connection.execute(
                 """SELECT * FROM entry_intents WHERE episode_id = ?
-                   AND state NOT IN (?, ?, ?) ORDER BY updated_at DESC LIMIT 1""",
+                   AND state NOT IN (?, ?, ?, ?) ORDER BY updated_at DESC LIMIT 1""",
                 (episode_id, *terminal),
             ).fetchone()
         return self._entry_intent_from_row(row)
@@ -411,10 +430,64 @@ class SQLiteRuntimeRepository(RuntimeRepository):
         sql = "SELECT * FROM entry_intents"
         params = ()
         if active_only:
-            sql += " WHERE state NOT IN (?, ?, ?)"
-            params = ("INVALIDATED", "EXPIRED", "CANCELLED")
+            sql += " WHERE state NOT IN (?, ?, ?, ?)"
+            params = ("REJECTED", "INVALIDATED", "EXPIRED", "CANCELLED")
         sql += " ORDER BY updated_at, entry_intent_id"
         with self._database.connect() as connection:
             rows = connection.execute(sql, params).fetchall()
         return [self._entry_intent_from_row(row) for row in rows]
+
+    def save_entry_review(self, record: Mapping[str, Any]) -> None:
+        with self._database.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO entry_reviews(review_id, entry_intent_id, record_json, status, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(review_id) DO UPDATE SET
+                    entry_intent_id=excluded.entry_intent_id,
+                    record_json=excluded.record_json,
+                    status=excluded.status,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    str(record["review_id"]),
+                    str(record["entry_intent_id"]),
+                    json.dumps(dict(record), sort_keys=True, default=str),
+                    str(record["status"]),
+                    str(record["updated_at"]),
+                ),
+            )
+
+    @staticmethod
+    def _entry_review_from_row(row) -> EntryReviewRecord | None:
+        if row is None:
+            return None
+        return EntryReviewRecord.from_record(json.loads(row["record_json"]))
+
+    def get_entry_review(self, review_id: str) -> EntryReviewRecord | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM entry_reviews WHERE review_id = ?", (review_id,)
+            ).fetchone()
+        return self._entry_review_from_row(row)
+
+    def get_latest_entry_review(self, entry_intent_id: str) -> EntryReviewRecord | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                """SELECT * FROM entry_reviews WHERE entry_intent_id = ?
+                   ORDER BY updated_at DESC, review_id DESC LIMIT 1""",
+                (entry_intent_id,),
+            ).fetchone()
+        return self._entry_review_from_row(row)
+
+    def list_entry_reviews(self, *, entry_intent_id: str | None = None) -> list[EntryReviewRecord]:
+        sql = "SELECT * FROM entry_reviews"
+        params: tuple[str, ...] = ()
+        if entry_intent_id is not None:
+            sql += " WHERE entry_intent_id = ?"
+            params = (entry_intent_id,)
+        sql += " ORDER BY updated_at, review_id"
+        with self._database.connect() as connection:
+            rows = connection.execute(sql, params).fetchall()
+        return [self._entry_review_from_row(row) for row in rows]
 
