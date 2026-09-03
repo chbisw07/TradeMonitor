@@ -6,12 +6,26 @@ from uuid import uuid4
 
 from trademonitor.domain.enums import ManagementStatus, PositionOrigin, PositionState
 from trademonitor.domain.events import DomainEvent
-from trademonitor.domain.models import BrokerAccountSnapshot, BrokerPositionSnapshot, PositionRecord
+from trademonitor.domain.models import (
+    BrokerAccountSnapshot,
+    BrokerPositionSnapshot,
+    PositionAdoptionRequest,
+    PositionManagementProfile,
+    PositionRecord,
+)
 from trademonitor.persistence.repository import RuntimeRepository
 
 
 class UnmanagedPositionError(PermissionError):
     """Raised when a management operation is attempted across the UM boundary."""
+
+
+class PositionAdoptionError(ValueError):
+    """Raised when an explicit adoption request is invalid for current broker truth."""
+
+
+class AlreadyManagedPositionError(PositionAdoptionError):
+    """Raised when adoption is requested for a position already under TM management."""
 
 
 class PositionManager:
@@ -138,6 +152,75 @@ class PositionManager:
         if open_only:
             return [position for position in positions if position.is_open]
         return positions
+
+    def get_position(self, position_id: str) -> PositionRecord | None:
+        return self._repository.get_position(position_id)
+
+    def management_profile(self, position_id: str) -> PositionManagementProfile | None:
+        return self._repository.get_position_management_profile(position_id)
+
+    def adopt(
+        self, request: PositionAdoptionRequest
+    ) -> tuple[PositionRecord, PositionManagementProfile, list[DomainEvent]]:
+        """Explicitly adopt one open external broker position into TM management.
+
+        Adoption changes only TradeMonitor authority/metadata. It performs no broker
+        write. Broker quantity, average price, state and identity remain broker truth.
+        """
+        current = self._repository.get_position(request.position_id)
+        if current is None:
+            raise PositionAdoptionError(f"Unknown position: {request.position_id}")
+        if current.management_status == ManagementStatus.MANAGED:
+            raise AlreadyManagedPositionError(
+                f"Position {current.position_id} is already MANAGED"
+            )
+        if not current.is_open:
+            raise PositionAdoptionError(
+                f"Position {current.position_id} is not open at broker and cannot be adopted"
+            )
+
+        profile = request.to_profile()
+        adopted = PositionRecord(
+            position_id=current.position_id,
+            broker=current.broker,
+            broker_position_key=current.broker_position_key,
+            exchange=current.exchange,
+            symbol=current.symbol,
+            product=current.product,
+            quantity=current.quantity,
+            average_price=current.average_price,
+            state=current.state,
+            management_status=ManagementStatus.MANAGED,
+            origin=(
+                PositionOrigin.BROKER_ADOPTED
+                if current.origin == PositionOrigin.BROKER_EXTERNAL
+                else current.origin
+            ),
+            last_price=current.last_price,
+            realized_pnl=current.realized_pnl,
+            unrealized_pnl=current.unrealized_pnl,
+            instrument_token=current.instrument_token,
+            first_seen_at=current.first_seen_at,
+            updated_at=request.requested_at,
+        )
+        self._repository.save_position(adopted.to_record())
+        self._repository.save_position_management_profile(profile.to_record())
+        event = DomainEvent.create(
+            "POSITION_ADOPTED",
+            source="POSITION",
+            payload={
+                **self._event_payload(adopted),
+                "trade_type": profile.trade_type.value,
+                "instrument_type": profile.instrument_type.value,
+                "asset_class": profile.asset_class.value,
+                "horizon_at": profile.horizon_at.isoformat(),
+                "expiry_date": None if profile.expiry_date is None else profile.expiry_date.isoformat(),
+                "adopted_by": profile.activated_by,
+                "reason": profile.activation_reason,
+            },
+            occurred_at=request.requested_at,
+        )
+        return adopted, profile, [event]
 
     @staticmethod
     def require_managed(position: PositionRecord) -> None:

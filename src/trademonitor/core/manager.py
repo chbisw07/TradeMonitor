@@ -30,11 +30,13 @@ from trademonitor.domain.models import (
     IntakeResult,
     NormalizedTradeIntent,
     PositionRecord,
+    PositionAdoptionRequest,
+    PositionManagementProfile,
 )
 from trademonitor.entry.monitor import EntryMonitor
 from trademonitor.entry.review import EntryReviewCoordinator
 from trademonitor.persistence.repository import RuntimeRepository
-from trademonitor.positions.manager import PositionManager
+from trademonitor.positions.manager import PositionAdoptionError, PositionManager
 from trademonitor.risk.engine import RiskEngine
 
 
@@ -720,6 +722,43 @@ class CoreTMManager:
         with self._lock:
             self._ensure_started()
             return self._positions.list_positions(open_only=open_only)
+
+    def adopt_position(
+        self, request: PositionAdoptionRequest
+    ) -> tuple[PositionRecord, PositionManagementProfile]:
+        """Explicitly cross one broker position from UNMANAGED to MANAGED.
+
+        Adoption is a TM authority change only; it never writes to the broker.
+        Current-runtime broker reconciliation is required so adoption is based on
+        current broker truth rather than a persisted last-known position.
+        """
+        with self._lock:
+            self._ensure_started()
+            broker_ctx = self._contexts.get("broker").data
+            if not broker_ctx.get("runtime_reconciled", False):
+                raise PositionAdoptionError(
+                    "Current-runtime broker reconciliation is required before adoption"
+                )
+            position = self._positions.get_position(request.position_id)
+            if position is None:
+                raise PositionAdoptionError(f"Unknown position: {request.position_id}")
+            reconciled_broker = broker_ctx.get("broker")
+            if reconciled_broker and position.broker != reconciled_broker:
+                raise PositionAdoptionError(
+                    f"Position broker {position.broker!r} is not the currently reconciled broker {reconciled_broker!r}"
+                )
+            adopted, profile, events = self._positions.adopt(request)
+            for event in events:
+                self._record_event(event)
+            self._refresh_position_context(source="POSITION")
+            return adopted, profile
+
+    def position_management_profile(
+        self, position_id: str
+    ) -> PositionManagementProfile | None:
+        with self._lock:
+            self._ensure_started()
+            return self._positions.management_profile(position_id)
 
     def status_snapshot(self) -> dict[str, dict[str, Any]]:
         """Return a user-facing copy of the current runtime contexts."""

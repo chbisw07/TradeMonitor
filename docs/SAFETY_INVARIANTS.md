@@ -72,3 +72,14 @@
 - Risk profile changes are versioned and audited; they do not silently resurrect blocked trades.
 - A `RISK_BLOCKED` entry requires an explicit re-evaluation request before another Risk gate can occur.
 - `RISK_APPROVED` is permission from RM only; it is not an ExecutionRequest and does not invoke Module M.
+
+
+## TM3/TGT1 adoption invariants
+
+- `UNMANAGED` is a hard read-only boundary until explicit adoption.
+- Adoption never performs a broker write and never changes broker truth.
+- Current-runtime broker reconciliation is required before adoption.
+- Closed positions cannot be adopted and already-managed positions are not re-adopted.
+- F&O adoption requires expiry and an explicit holding intent/horizon.
+- Every successful adoption is auditable and survives restart.
+- Broker reconciliation after adoption may change quantity/state/average price but must preserve valid TM management authority/profile until broker truth closes the position.

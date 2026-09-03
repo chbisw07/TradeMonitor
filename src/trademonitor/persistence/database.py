@@ -74,6 +74,21 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_positions_management_status
                     ON positions(management_status);
 
+
+                CREATE TABLE IF NOT EXISTS position_management_profiles (
+                    position_id TEXT PRIMARY KEY,
+                    asset_class TEXT NOT NULL,
+                    instrument_type TEXT NOT NULL,
+                    trade_type TEXT NOT NULL,
+                    horizon_at TEXT NOT NULL,
+                    expiry_date TEXT,
+                    activated_at TEXT NOT NULL,
+                    activated_by TEXT NOT NULL,
+                    activation_reason TEXT NOT NULL,
+                    notes TEXT,
+                    FOREIGN KEY(position_id) REFERENCES positions(position_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS intake_outcomes (
                     outcome_id TEXT PRIMARY KEY,
                     outcome_key TEXT NOT NULL UNIQUE,

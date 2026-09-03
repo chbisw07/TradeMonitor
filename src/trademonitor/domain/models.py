@@ -14,6 +14,9 @@ from trademonitor.domain.enums import (
     ManagementStatus,
     PositionOrigin,
     PositionState,
+    AssetClass,
+    InstrumentType,
+    TradeType,
 )
 
 
@@ -251,6 +254,101 @@ class PositionRecord:
             instrument_token=record.get("instrument_token"),
             first_seen_at=datetime.fromisoformat(str(record["first_seen_at"])),
             updated_at=datetime.fromisoformat(str(record["updated_at"])),
+        )
+
+
+@dataclass(frozen=True)
+class PositionManagementProfile:
+    """Management metadata attached to a MANAGED position.
+
+    Broker fields remain in ``PositionRecord`` as factual broker truth. This
+    profile contains TradeMonitor management intent. Adopted and future
+    TM-native positions use the same profile shape so downstream management
+    logic does not need to care how the position entered TM.
+    """
+
+    position_id: str
+    asset_class: AssetClass
+    instrument_type: InstrumentType
+    trade_type: TradeType
+    horizon_at: datetime
+    expiry_date: date | None
+    activated_at: datetime
+    activated_by: str
+    activation_reason: str
+    notes: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.position_id.strip():
+            raise ValueError("position_id is required")
+        if not self.activated_by.strip():
+            raise ValueError("activated_by is required")
+        if not self.activation_reason.strip():
+            raise ValueError("activation_reason is required")
+        if self.instrument_type in {InstrumentType.FUTURE, InstrumentType.OPTION} and self.expiry_date is None:
+            raise ValueError("expiry_date is required for F&O positions")
+        if self.instrument_type == InstrumentType.CASH and self.expiry_date is not None:
+            raise ValueError("expiry_date is not applicable to CASH positions")
+        if self.horizon_at < self.activated_at:
+            raise ValueError("horizon_at cannot be earlier than activation time")
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "position_id": self.position_id,
+            "asset_class": self.asset_class.value,
+            "instrument_type": self.instrument_type.value,
+            "trade_type": self.trade_type.value,
+            "horizon_at": self.horizon_at.isoformat(),
+            "expiry_date": None if self.expiry_date is None else self.expiry_date.isoformat(),
+            "activated_at": self.activated_at.isoformat(),
+            "activated_by": self.activated_by,
+            "activation_reason": self.activation_reason,
+            "notes": self.notes,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "PositionManagementProfile":
+        return cls(
+            position_id=str(record["position_id"]),
+            asset_class=AssetClass(str(record["asset_class"])),
+            instrument_type=InstrumentType(str(record["instrument_type"])),
+            trade_type=TradeType(str(record["trade_type"])),
+            horizon_at=datetime.fromisoformat(str(record["horizon_at"])),
+            expiry_date=None if record.get("expiry_date") is None else date.fromisoformat(str(record["expiry_date"])),
+            activated_at=datetime.fromisoformat(str(record["activated_at"])),
+            activated_by=str(record["activated_by"]),
+            activation_reason=str(record["activation_reason"]),
+            notes=record.get("notes"),
+        )
+
+
+@dataclass(frozen=True)
+class PositionAdoptionRequest:
+    """Explicit User request to cross the UNMANAGED -> MANAGED boundary."""
+
+    position_id: str
+    asset_class: AssetClass
+    instrument_type: InstrumentType
+    trade_type: TradeType
+    horizon_at: datetime
+    expiry_date: date | None
+    requested_at: datetime
+    requested_by: str
+    reason: str
+    notes: str | None = None
+
+    def to_profile(self) -> PositionManagementProfile:
+        return PositionManagementProfile(
+            position_id=self.position_id,
+            asset_class=AssetClass(self.asset_class),
+            instrument_type=InstrumentType(self.instrument_type),
+            trade_type=TradeType(self.trade_type),
+            horizon_at=self.horizon_at,
+            expiry_date=self.expiry_date,
+            activated_at=self.requested_at,
+            activated_by=self.requested_by,
+            activation_reason=self.reason,
+            notes=self.notes,
         )
 
 

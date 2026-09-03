@@ -13,6 +13,7 @@ from trademonitor.domain.models import (
     EpisodeRecord,
     OutcomeRecord,
     PositionRecord,
+    PositionManagementProfile,
     SourceObservation,
     RiskProfile,
     RiskDecisionRecord,
@@ -44,6 +45,15 @@ class RuntimeRepository(ABC):
 
     @abstractmethod
     def list_positions(self, *, broker: str | None = None) -> list[PositionRecord]: ...
+
+    @abstractmethod
+    def get_position(self, position_id: str) -> PositionRecord | None: ...
+
+    @abstractmethod
+    def save_position_management_profile(self, record: Mapping[str, Any]) -> None: ...
+
+    @abstractmethod
+    def get_position_management_profile(self, position_id: str) -> PositionManagementProfile | None: ...
 
     @abstractmethod
     def save_source_observation(self, record: Mapping[str, Any]) -> None: ...
@@ -285,6 +295,51 @@ class SQLiteRuntimeRepository(RuntimeRepository):
             )
             for row in rows
         ]
+
+    def get_position(self, position_id: str) -> PositionRecord | None:
+        with self._database.connect() as connection:
+            row = connection.execute("SELECT * FROM positions WHERE position_id = ?", (position_id,)).fetchone()
+        if row is None:
+            return None
+        return PositionRecord.from_record(dict(row))
+
+    def save_position_management_profile(self, record: Mapping[str, Any]) -> None:
+        with self._database.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO position_management_profiles(
+                    position_id, asset_class, instrument_type, trade_type, horizon_at,
+                    expiry_date, activated_at, activated_by, activation_reason, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(position_id) DO UPDATE SET
+                    asset_class=excluded.asset_class,
+                    instrument_type=excluded.instrument_type,
+                    trade_type=excluded.trade_type,
+                    horizon_at=excluded.horizon_at,
+                    expiry_date=excluded.expiry_date,
+                    activated_at=excluded.activated_at,
+                    activated_by=excluded.activated_by,
+                    activation_reason=excluded.activation_reason,
+                    notes=excluded.notes
+                """,
+                (
+                    str(record["position_id"]), str(record["asset_class"]),
+                    str(record["instrument_type"]), str(record["trade_type"]),
+                    str(record["horizon_at"]), record.get("expiry_date"),
+                    str(record["activated_at"]), str(record["activated_by"]),
+                    str(record["activation_reason"]), record.get("notes"),
+                ),
+            )
+
+    def get_position_management_profile(self, position_id: str) -> PositionManagementProfile | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM position_management_profiles WHERE position_id = ?",
+                (position_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return PositionManagementProfile.from_record(dict(row))
 
     def save_source_observation(self, record: Mapping[str, Any]) -> None:
         with self._database.connect() as connection:

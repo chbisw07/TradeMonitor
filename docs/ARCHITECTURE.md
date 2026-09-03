@@ -82,3 +82,10 @@ The bootstrap profile intentionally invents no numeric trading limits. Numeric l
 A profile change is two-step: propose with a reason, then explicitly confirm. Confirmation creates a new immutable profile version and is audited. There is no ordinary `force`, `ignore-risk`, or trade-level risk override path. A profile change does not automatically revive a previously `RISK_BLOCKED` trade; explicit re-evaluation is required.
 
 A Risk `PASS` moves the entry to `RISK_APPROVED`. This is still not an `ExecutionRequest`. Module M remains outside TM2 and no broker-write path exists.
+
+
+## TM3/TGT1 — Position adoption boundary
+
+TradeMonitor maintains one canonical Position universe. `MANAGED` / `UNMANAGED` is a management-authority attribute, not a different position type. Broker-discovered positions begin `UNMANAGED` and remain read-only to TM management until an explicit adoption workflow succeeds.
+
+Adoption requires current-runtime broker reconciliation and a durable Position Management Profile (asset class, instrument type, trade type, horizon, F&O expiry where applicable, adopting authority and reason). Adoption changes only TM management authority/provenance; broker quantity, average price, identity and open/closed state remain broker truth. Adopted and future TM-native positions use the same management-profile shape so downstream Position Management can remain origin-agnostic.

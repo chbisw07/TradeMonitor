@@ -1,5 +1,16 @@
 # Changelog
 
+## Version 0.3.0 / TM3-TGT1 — Position Manager and Adoption
+
+- Added explicit `UNMANAGED -> MANAGED` adoption workflow for broker-originated positions.
+- Added durable Position Management Profiles carrying asset/instrument/trade type, horizon, F&O expiry, adoption authority and reason.
+- Required current-runtime broker reconciliation before adoption.
+- Preserved broker quantity/state/identity as factual truth during and after adoption.
+- Added `BROKER_ADOPTED` provenance while keeping one canonical Position record.
+- Added restart-safe management-profile persistence and post-adoption broker reconciliation tests.
+- Preserved the hard UNMANAGED read-only boundary and zero broker-write capability.
+- Full suite: 75 tests passing.
+
 ## Version 0.2.3 / TM2-TGT4 — Risk Management Entry Gate
 
 - Added highest-authority deterministic pre-trade Risk gate (`PASS / BLOCK`).

@@ -10,24 +10,22 @@ The canonical design references are kept under `docs/`:
 
 ## Current Status
 
-**TM2 / TGT4 — Risk Management Entry Gate — COMPLETE**
+**TM3 / TGT1 — Position Manager and Adoption — COMPLETE**
 
-TM1 is frozen and complete. TM2 now implements the full PAPER-mode entry-decision path:
+TM1 and TM2 are complete. TM3 now begins the managed-position lifecycle:
 
-- source-aware Trade Intake with Outcome/Episode/time relevance and de-duplication
-- deterministic Entry Monitoring with trigger/confirmation/invalidation and DAY/BTST/STBT/POS intent
-- separate external Agents validation gate with `APPROVE / REJECT / RETREAT_WAIT` and User escalation
-- highest-authority Risk Management entry gate with deterministic `PASS / BLOCK`
-- account/portfolio visibility including `UNMANAGED` broker positions without violating their read-only boundary
-- versioned Setup/Admin-only Risk configuration with deliberate confirmation and audit
-- explicit `RISK_BLOCKED` re-evaluation boundary
-- current-runtime broker truth required before fresh risk can be approved
+- one unified broker-reconciled Position universe
+- explicit `MANAGED / UNMANAGED` authority boundary
+- broker-discovered positions remain `UNMANAGED` and read-only by default
+- explicit adoption requires current-runtime broker truth and sufficient management context
+- adopted positions receive durable asset/instrument/trade type, horizon, and F&O expiry metadata
+- adoption changes only TM management authority/provenance; broker quantity/state/average price remain broker truth
+- adopted positions survive restart and continue to reconcile to broker truth
+- future TM-native and adopted positions are designed to converge on the same downstream management machinery
 
-A Risk `PASS` reaches only `RISK_APPROVED`. It is **not** an ExecutionRequest.
+**NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM3/TGT1.**
 
-**NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM2/TGT4.**
-
-Module M, real execution, position-management policies, and Exit Monitor remain later roadmap targets.
+SL/TP/TSL and deterministic management rules begin in TM3/TGT2. Module M and real execution remain TM4 scope.
 
 ## Development Setup
 
@@ -49,15 +47,3 @@ By default the runtime database is stored at `data/trademonitor.db`. Override it
 ```bash
 TM_DATABASE_PATH=/tmp/trademonitor.db python scripts/run_dev.py
 ```
-
-## TM2/TGT3 — External Agents Validation Gate
-
-TradeMonitor now supports a bounded entry-validation handoff to a **separate external Agents service**. The Entry domain sends a structured review packet only after deterministic entry monitoring reaches `READY_FOR_REVIEW`. Agents must return exactly one verdict: `APPROVE`, `REJECT`, or `RETREAT_WAIT`, with an optional suggestion.
-
-- `APPROVE` advances the entry only to `READY_FOR_RISK`.
-- `REJECT` or `RETREAT_WAIT` never silently decides the trade; they escalate to the User, who chooses `APPROVE`, `REJECT`, or `RETREAT_WAIT`.
-- Agent failure/unavailability also escalates to the User and never implies approval.
-- Suggestions are persisted as advice only; they cannot create broker actions or bypass the normal Entry/Risk flow.
-- Agents do not own TradeMonitor state and have no access to Module M or broker execution.
-
-**There is still no live broker-write capability in TM2/TGT3.**
