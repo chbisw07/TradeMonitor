@@ -1,47 +1,38 @@
 # TradeMonitor
 
-TradeMonitor is intended to become a professional real-time trade monitoring and execution system for Indian markets. Future versions may monitor candidate stocks, entry conditions, broker positions, operational instructions, Google Sheet and CGPT inputs, and eventually support broker execution and position management.
+TradeMonitor is being developed as a professional trade-monitoring, risk-governance, position-management, and execution system for Indian markets.
+
+The canonical design references are kept under `docs/`:
+
+- `TradeMonitor_TM0_Architecture_Thesis.docx`
+- `TRADEMONITOR_ROADMAP.md`
+- `TradeMonitor_TM_Roadmap.docx`
 
 ## Current Status
 
-TM0 is architecture and repository setup only.
+**TM1 / TGT1 — Core TM Manager and Runtime Contexts**
 
-**NO LIVE TRADING CAPABILITY EXISTS IN TM0.**
+Implemented in this target:
 
-This repository currently contains no trading logic, broker execution, scanner logic, LLM logic, market-data polling, Google Sheets integration, order placement, or state-machine behavior.
+- Core TM Manager coordination foundation
+- canonical runtime contexts: broker, market, trade, position, risk, decision, health
+- explicit synchronous event bus
+- structured immutable runtime events
+- SQLite persistence for context snapshots and event audit records
+- restart/context restoration foundation
+- concise console status view
+- unit/integration tests for persistence, event flow, restart, and safety status
 
-## Future Components
+**NO LIVE TRADING CAPABILITY EXISTS IN TM1/TGT1.**
 
-- Candidate management
-- Domain model and state machine
-- Market-data provider interfaces
-- Risk and execution engines
-- Broker abstraction and reconciliation
-- Position management
-- Event persistence and replay
-- Console UI for V1
-- Optional web UI later
-- Google Sheet and CGPT ingestion
-- Advisory intelligence
+Broker truth reconciliation, actual trade intake, Risk Management rules, Agent integration, position management, and Module M execution are later targets per the roadmap.
 
 ## Development Setup
-
-Create a virtual environment:
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-```
-
-Install in editable mode with development dependencies:
-
-```bash
 pip install -e ".[dev]"
-```
-
-Run tests:
-
-```bash
 pytest
 ```
 
@@ -49,4 +40,10 @@ Run the development application:
 
 ```bash
 python scripts/run_dev.py
+```
+
+By default the runtime database is stored at `data/trademonitor.db`. Override it with:
+
+```bash
+TM_DATABASE_PATH=/tmp/trademonitor.db python scripts/run_dev.py
 ```

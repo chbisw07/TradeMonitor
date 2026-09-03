@@ -1,29 +1,31 @@
 # Architecture
 
-TradeMonitor is designed so core and business logic remain independent of any user interface. V1 will use an interactive console UI. A web UI may be added later without redesigning the core.
+The canonical architecture is defined by the **TradeMonitor TM0 Architecture Thesis** and the **TradeMonitor Development Roadmap** in this `docs/` folder.
 
-## External Inputs
+## TM1/TGT1 Runtime Shape
 
-- Scanner
-- Google Sheet
-- CGPT analysis
-- User commands
-- Market data
+TradeMonitor uses a small **Core TM Manager** as a coordinator rather than a master trading algorithm. The Core Manager synchronizes runtime contexts, routes events, supervises lifecycle coordination, persists state, and exposes a coherent operating picture.
+
+Canonical runtime contexts introduced in TGT1:
+
 - Broker
+- Market
+- Trade
+- Position
+- Risk
+- Decision
+- Health
 
-## TradeMonitor Core
+Domain modules own the meaning of their data. The Core Manager owns controlled synchronization and durable coordination.
 
-- Candidate Manager
-- State Machine
-- Trigger/Confirmation Engine
-- Risk Engine
-- Execution Engine
-- Position Manager
-- Exit Engine
-- Event Store
-- Broker Reconciliation
+## Event Boundary
 
-## Interfaces
+Runtime changes are represented by structured, auditable events. TGT1 uses a synchronous event bus so the architecture has an explicit communication boundary without prematurely committing to threads or processes.
 
-- Console UI now
-- Optional Web UI later
+## Persistence and Recovery
+
+TGT1 persists runtime contexts and events in SQLite. On restart, the Core Manager restores the latest durable context. Broker-truth reconciliation is implemented in TM1/TGT2; TGT1 establishes the persistence/recovery foundation it will use.
+
+## Safety Boundary
+
+TM1/TGT1 has **NO LIVE TRADING CAPABILITY**. No code in this target submits, modifies, or cancels broker orders.

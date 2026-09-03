@@ -37,3 +37,8 @@ dist/
 build/
 data/*
 !data/.gitkeep
+
+# TradeMonitor runtime state
+*.db
+*.db-shm
+*.db-wal

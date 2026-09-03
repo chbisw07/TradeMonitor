@@ -1,19 +1,16 @@
 # Milestones
 
-Milestone order may evolve after design review.
+The canonical roadmap is maintained in:
 
-- TM0  Architecture + repository skeleton
-- TM1  Domain model + state machine
-- TM2  Persistence + event journal
-- TM3  Market-data / candle monitoring
-- TM4  Interactive console
-- TM5  Google Sheet candidate / CGPT ingestion
-- TM6  Broker abstraction
-- TM7  PAPER broker / execution simulator
-- TM8  SEMI_AUTO execution
-- TM9  Position manager
-- TM10 Deterministic exit engine
-- TM11 Broker reconciliation + crash recovery
-- TM12 Operational command engine
-- TM13 LLM advisor
-- TM14 AUTO execution only after sufficient validation
+- `TRADEMONITOR_ROADMAP.md`
+- `TradeMonitor_TM_Roadmap.docx`
+
+The previous TM0 placeholder milestone list is superseded by the four-milestone roadmap.
+
+## Current Development Position
+
+**TM1 — Core Foundation**
+
+Current target: **TGT1 — Core TM Manager and Runtime Contexts**
+
+TM1/TGT1 establishes the coordinating core, runtime contexts, persistence/restart foundation, structured event logging, and PAPER-only console status. It contains **no live broker execution capability**.
