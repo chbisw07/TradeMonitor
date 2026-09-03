@@ -10,22 +10,21 @@ The canonical design references are kept under `docs/`:
 
 ## Current Status
 
-**TM3 / TGT1 — Position Manager and Adoption — COMPLETE**
+**TM3 / TGT2 — Deterministic Management Rules — COMPLETE**
 
-TM1 and TM2 are complete. TM3 now begins the managed-position lifecycle:
+TM1 and TM2 are complete. TM3 now includes deterministic managed-position rules:
 
-- one unified broker-reconciled Position universe
-- explicit `MANAGED / UNMANAGED` authority boundary
-- broker-discovered positions remain `UNMANAGED` and read-only by default
-- explicit adoption requires current-runtime broker truth and sufficient management context
-- adopted positions receive durable asset/instrument/trade type, horizon, and F&O expiry metadata
-- adoption changes only TM management authority/provenance; broker quantity/state/average price remain broker truth
-- adopted positions survive restart and continue to reconcile to broker truth
-- future TM-native and adopted positions are designed to converge on the same downstream management machinery
+- unified `MANAGED / UNMANAGED` Position universe and explicit adoption boundary
+- deterministic SL / TP / TSL, profit-lock, spot/premium/P&L, time/horizon, and invalidation rules
+- named rule-policy installation and explicit rule cancellation
+- stateful trailing/profit-lock rules with durable arming/ratcheting state
+- management-rule state survives restart
+- triggered rules emit auditable `EXIT_REVIEW` signals only; they do not create ExecutionRequests
+- broker truth remains authoritative and `UNMANAGED` positions remain read-only
 
-**NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM3/TGT1.**
+**NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM3/TGT2.**
 
-SL/TP/TSL and deterministic management rules begin in TM3/TGT2. Module M and real execution remain TM4 scope.
+Exit proposals, partial exits, duplicate-exit suppression, and position conversion belong to TM3/TGT3. Module M and real execution remain TM4 scope.
 
 ## Development Setup
 

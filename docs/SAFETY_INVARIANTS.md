@@ -83,3 +83,14 @@
 - F&O adoption requires expiry and an explicit holding intent/horizon.
 - Every successful adoption is auditable and survives restart.
 - Broker reconciliation after adoption may change quantity/state/average price but must preserve valid TM management authority/profile until broker truth closes the position.
+
+
+## TM3/TGT2 deterministic-management invariants
+
+- Deterministic management rules may be attached only to open `MANAGED` positions with a valid management profile.
+- `UNMANAGED` positions remain read-only; no rule may be installed or evaluated as management authority across that boundary.
+- Rule triggers are management signals, not broker actions. They create no `ExecutionRequest` and never invoke Module M.
+- Stateful rules such as trailing SL and profit lock must persist their armed/watermark state across restart.
+- Rule creation, policy installation, arming/ratcheting, triggering, and cancellation are auditable.
+- Broker truth remains authoritative for position quantity/state/average price while TM rules govern only management intent.
+- TM3/TGT2 remains PAPER-only and exposes no broker-write path.

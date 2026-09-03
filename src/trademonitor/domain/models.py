@@ -17,6 +17,10 @@ from trademonitor.domain.enums import (
     AssetClass,
     InstrumentType,
     TradeType,
+    ManagementRuleType,
+    ManagementRuleStatus,
+    ManagementSignal,
+    ConditionOperator,
 )
 
 
@@ -1238,3 +1242,116 @@ class RiskProfileChange:
             confirmed_at=None if record.get("confirmed_at") is None else datetime.fromisoformat(str(record["confirmed_at"])),
             resulting_profile_version=record.get("resulting_profile_version"),
         )
+
+
+@dataclass(frozen=True)
+class ManagementRuleSpec:
+    """User/policy supplied deterministic rule specification.
+
+    `parameters` is intentionally typed as a mapping so the rule engine can evolve
+    rule families without coupling the Position record to rule-specific fields.
+    Every rule is still validated by its specialist engine before activation.
+    """
+
+    rule_type: ManagementRuleType
+    parameters: Mapping[str, Any]
+    created_by: str
+    reason: str
+    policy_name: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.created_by.strip():
+            raise ValueError("created_by is required")
+        if not self.reason.strip():
+            raise ValueError("reason is required")
+        object.__setattr__(self, "rule_type", ManagementRuleType(self.rule_type))
+        object.__setattr__(self, "parameters", dict(self.parameters))
+
+
+@dataclass(frozen=True)
+class PositionManagementRule:
+    """Durable deterministic rule attached to exactly one MANAGED position."""
+
+    rule_id: str
+    position_id: str
+    rule_type: ManagementRuleType
+    parameters: Mapping[str, Any]
+    status: ManagementRuleStatus
+    runtime_state: Mapping[str, Any]
+    created_at: datetime
+    updated_at: datetime
+    created_by: str
+    reason: str
+    policy_name: str | None = None
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "rule_id": self.rule_id,
+            "position_id": self.position_id,
+            "rule_type": self.rule_type.value,
+            "parameters": dict(self.parameters),
+            "status": self.status.value,
+            "runtime_state": dict(self.runtime_state),
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "created_by": self.created_by,
+            "reason": self.reason,
+            "policy_name": self.policy_name,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "PositionManagementRule":
+        return cls(
+            rule_id=str(record["rule_id"]),
+            position_id=str(record["position_id"]),
+            rule_type=ManagementRuleType(str(record["rule_type"])),
+            parameters=dict(record.get("parameters", {})),
+            status=ManagementRuleStatus(str(record["status"])),
+            runtime_state=dict(record.get("runtime_state", {})),
+            created_at=datetime.fromisoformat(str(record["created_at"])),
+            updated_at=datetime.fromisoformat(str(record["updated_at"])),
+            created_by=str(record["created_by"]),
+            reason=str(record["reason"]),
+            policy_name=record.get("policy_name"),
+        )
+
+
+@dataclass(frozen=True)
+class PositionManagementSnapshot:
+    """Current facts supplied to the deterministic management-rule engine."""
+
+    observed_at: datetime
+    premium: Decimal | None = None
+    underlying_price: Decimal | None = None
+    pnl: Decimal | None = None
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        observed_at: datetime,
+        premium: Decimal | str | int | float | None = None,
+        underlying_price: Decimal | str | int | float | None = None,
+        pnl: Decimal | str | int | float | None = None,
+    ) -> "PositionManagementSnapshot":
+        return cls(
+            observed_at=observed_at,
+            premium=_decimal(premium),
+            underlying_price=_decimal(underlying_price),
+            pnl=_decimal(pnl),
+        )
+
+
+@dataclass(frozen=True)
+class ManagementRuleEvaluation:
+    """One deterministic rule result; not an execution request."""
+
+    rule_id: str
+    position_id: str
+    rule_type: ManagementRuleType
+    triggered: bool
+    signal: ManagementSignal
+    reason: str
+    evaluated_at: datetime
+    effective_value: Decimal | None = None
+

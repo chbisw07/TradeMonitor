@@ -89,7 +89,27 @@ class Database:
                     FOREIGN KEY(position_id) REFERENCES positions(position_id)
                 );
 
-                CREATE TABLE IF NOT EXISTS intake_outcomes (
+
+
+                CREATE TABLE IF NOT EXISTS position_management_rules (
+                    rule_id TEXT PRIMARY KEY,
+                    position_id TEXT NOT NULL,
+                    rule_type TEXT NOT NULL,
+                    parameters_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    runtime_state_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    created_by TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    policy_name TEXT,
+                    FOREIGN KEY(position_id) REFERENCES positions(position_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_management_rules_position_status
+                    ON position_management_rules(position_id, status);
+
+                                CREATE TABLE IF NOT EXISTS intake_outcomes (
                     outcome_id TEXT PRIMARY KEY,
                     outcome_key TEXT NOT NULL UNIQUE,
                     identity_json TEXT NOT NULL,

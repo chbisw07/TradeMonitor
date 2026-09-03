@@ -89,3 +89,14 @@ A Risk `PASS` moves the entry to `RISK_APPROVED`. This is still not an `Executio
 TradeMonitor maintains one canonical Position universe. `MANAGED` / `UNMANAGED` is a management-authority attribute, not a different position type. Broker-discovered positions begin `UNMANAGED` and remain read-only to TM management until an explicit adoption workflow succeeds.
 
 Adoption requires current-runtime broker reconciliation and a durable Position Management Profile (asset class, instrument type, trade type, horizon, F&O expiry where applicable, adopting authority and reason). Adoption changes only TM management authority/provenance; broker quantity, average price, identity and open/closed state remain broker truth. Adopted and future TM-native positions use the same management-profile shape so downstream Position Management can remain origin-agnostic.
+
+
+## TM3/TGT2 — Deterministic Position-Management Rules
+
+A specialist `ManagementRuleEngine` lives inside the Position domain. It owns validation, persistence, stateful evaluation, and lifecycle events for explicit management rules. The engine can emit an `EXIT_REVIEW` management signal, but it is intentionally not an Exit Monitor and cannot create broker-facing execution.
+
+The flow is:
+
+`MANAGED Position + Management Profile + Current Facts -> ManagementRuleEngine -> Rule Evaluations / EXIT_REVIEW signals -> (TM3/TGT3 Exit Monitor later)`
+
+The rule engine is below the Position ownership boundary, remains deterministic, and never crosses the `UNMANAGED` boundary.

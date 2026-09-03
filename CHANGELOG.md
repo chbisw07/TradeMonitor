@@ -1,5 +1,27 @@
 # Changelog
 
+## Version 0.3.1 / TM3-TGT2 — Deterministic Management Rules
+
+- Added durable deterministic managed-position rule engine.
+- Added SL, TP, TSL, profit-lock, spot/premium/P&L, time/horizon, and underlying-invalidation rule families.
+- Added named management-policy installation and explicit rule cancellation.
+- Added stateful long/short trailing logic and durable profit-lock activation.
+- Added restart persistence for rule runtime state.
+- Added control-room management-rule counts.
+- Preserved PAPER-only, `UNMANAGED` read-only, and no-ExecutionRequest boundaries.
+- Validation: 84 tests passed.
+
+- Added durable deterministic managed-position rule engine.
+- Added SL, TP, TSL, profit-lock, spot/premium/P&L, time/horizon, and underlying-invalidation rule families.
+- Added named management-policy installation and explicit rule cancellation.
+- Added stateful long/short trailing logic and durable profit-lock activation.
+- Added restart persistence for rule runtime state.
+- Added control-room management-rule counts.
+- Preserved PAPER-only, `UNMANAGED` read-only, and no-ExecutionRequest boundaries.
+- Validation: 84 tests passed.
+
+# Changelog
+
 ## Version 0.3.0 / TM3-TGT1 — Position Manager and Adoption
 
 - Added explicit `UNMANAGED -> MANAGED` adoption workflow for broker-originated positions.

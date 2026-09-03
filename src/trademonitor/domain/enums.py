@@ -179,3 +179,34 @@ class RiskChangeStatus(StrEnum):
     PENDING = "PENDING"
     CONFIRMED = "CONFIRMED"
     CANCELLED = "CANCELLED"
+
+
+class ManagementRuleType(StrEnum):
+    """Deterministic managed-position rule families introduced in TM3/TGT2."""
+
+    HARD_SL = "HARD_SL"
+    TAKE_PROFIT = "TAKE_PROFIT"
+    TRAILING_SL = "TRAILING_SL"
+    PROFIT_LOCK = "PROFIT_LOCK"
+    SPOT_CONDITION = "SPOT_CONDITION"
+    PREMIUM_CONDITION = "PREMIUM_CONDITION"
+    PNL_CONDITION = "PNL_CONDITION"
+    TIME_EXIT = "TIME_EXIT"
+    HORIZON = "HORIZON"
+    UNDERLYING_INVALIDATION = "UNDERLYING_INVALIDATION"
+
+
+class ManagementRuleStatus(StrEnum):
+    """Lifecycle of a deterministic position-management rule."""
+
+    ACTIVE = "ACTIVE"
+    ARMED = "ARMED"
+    TRIGGERED = "TRIGGERED"
+    CANCELLED = "CANCELLED"
+
+
+class ManagementSignal(StrEnum):
+    """Rule-engine output consumed later by the TM3/TGT3 Exit Monitor."""
+
+    NONE = "NONE"
+    EXIT_REVIEW = "EXIT_REVIEW"

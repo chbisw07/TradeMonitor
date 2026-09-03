@@ -25,7 +25,8 @@ The previous TM0 placeholder milestone list is superseded by the four-milestone 
 
 **TM3 — Position Management + Exit: IN PROGRESS**
 
-- TGT1 — Position Manager and Adoption: **COMPLETE IN THIS WORKING TREE**
-- Next: TGT2 — Deterministic Management Rules
+- TGT1 — Position Manager and Adoption: **COMPLETE**
+- TGT2 — Deterministic Management Rules: **COMPLETE IN THIS WORKING TREE**
+- Next: TGT3 — Exit Monitor and Position Evolution
 
-TM3/TGT1 establishes explicit adoption of broker-originated positions while preserving the hard `UNMANAGED` boundary and broker truth. See `TM3_TGT1_ACCEPTANCE.md`.
+TM3/TGT2 adds deterministic managed-position rule evaluation while preserving the hard `UNMANAGED` boundary and broker truth. See `TM3_TGT2_ACCEPTANCE.md`.

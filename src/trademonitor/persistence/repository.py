@@ -18,6 +18,7 @@ from trademonitor.domain.models import (
     RiskProfile,
     RiskDecisionRecord,
     RiskProfileChange,
+    PositionManagementRule,
 )
 from trademonitor.persistence.database import Database
 
@@ -54,6 +55,18 @@ class RuntimeRepository(ABC):
 
     @abstractmethod
     def get_position_management_profile(self, position_id: str) -> PositionManagementProfile | None: ...
+
+
+    @abstractmethod
+    def save_management_rule(self, record: Mapping[str, Any]) -> None: ...
+
+    @abstractmethod
+    def get_management_rule(self, rule_id: str) -> PositionManagementRule | None: ...
+
+    @abstractmethod
+    def list_management_rules(
+        self, *, position_id: str | None = None, active_only: bool = False
+    ) -> list[PositionManagementRule]: ...
 
     @abstractmethod
     def save_source_observation(self, record: Mapping[str, Any]) -> None: ...
@@ -340,6 +353,78 @@ class SQLiteRuntimeRepository(RuntimeRepository):
         if row is None:
             return None
         return PositionManagementProfile.from_record(dict(row))
+
+
+    def save_management_rule(self, record: Mapping[str, Any]) -> None:
+        with self._database.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO position_management_rules(
+                    rule_id, position_id, rule_type, parameters_json, status,
+                    runtime_state_json, created_at, updated_at, created_by, reason, policy_name
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(rule_id) DO UPDATE SET
+                    rule_type=excluded.rule_type,
+                    parameters_json=excluded.parameters_json,
+                    status=excluded.status,
+                    runtime_state_json=excluded.runtime_state_json,
+                    updated_at=excluded.updated_at,
+                    created_by=excluded.created_by,
+                    reason=excluded.reason,
+                    policy_name=excluded.policy_name
+                """,
+                (
+                    str(record["rule_id"]), str(record["position_id"]), str(record["rule_type"]),
+                    json.dumps(record.get("parameters", {}), sort_keys=True, default=str),
+                    str(record["status"]),
+                    json.dumps(record.get("runtime_state", {}), sort_keys=True, default=str),
+                    str(record["created_at"]), str(record["updated_at"]),
+                    str(record["created_by"]), str(record["reason"]), record.get("policy_name"),
+                ),
+            )
+
+    def get_management_rule(self, rule_id: str) -> PositionManagementRule | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM position_management_rules WHERE rule_id = ?", (rule_id,)
+            ).fetchone()
+        return self._management_rule_from_row(row)
+
+    def list_management_rules(
+        self, *, position_id: str | None = None, active_only: bool = False
+    ) -> list[PositionManagementRule]:
+        query = "SELECT * FROM position_management_rules"
+        clauses: list[str] = []
+        params: list[Any] = []
+        if position_id is not None:
+            clauses.append("position_id = ?")
+            params.append(position_id)
+        if active_only:
+            clauses.append("status NOT IN ('TRIGGERED', 'CANCELLED')")
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY created_at, rule_id"
+        with self._database.connect() as connection:
+            rows = connection.execute(query, tuple(params)).fetchall()
+        return [self._management_rule_from_row(row) for row in rows if row is not None]
+
+    @staticmethod
+    def _management_rule_from_row(row) -> PositionManagementRule | None:
+        if row is None:
+            return None
+        return PositionManagementRule.from_record({
+            "rule_id": row["rule_id"],
+            "position_id": row["position_id"],
+            "rule_type": row["rule_type"],
+            "parameters": json.loads(row["parameters_json"]),
+            "status": row["status"],
+            "runtime_state": json.loads(row["runtime_state_json"]),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "created_by": row["created_by"],
+            "reason": row["reason"],
+            "policy_name": row["policy_name"],
+        })
 
     def save_source_observation(self, record: Mapping[str, Any]) -> None:
         with self._database.connect() as connection:

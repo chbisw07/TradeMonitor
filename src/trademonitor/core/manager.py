@@ -32,11 +32,16 @@ from trademonitor.domain.models import (
     PositionRecord,
     PositionAdoptionRequest,
     PositionManagementProfile,
+    ManagementRuleSpec,
+    PositionManagementRule,
+    PositionManagementSnapshot,
+    ManagementRuleEvaluation,
 )
 from trademonitor.entry.monitor import EntryMonitor
 from trademonitor.entry.review import EntryReviewCoordinator
 from trademonitor.persistence.repository import RuntimeRepository
 from trademonitor.positions.manager import PositionAdoptionError, PositionManager
+from trademonitor.positions.rules import ManagementRuleEngine
 from trademonitor.risk.engine import RiskEngine
 
 
@@ -53,6 +58,7 @@ class CoreTMManager:
         self._event_bus = event_bus or EventBus()
         self._contexts = RuntimeContexts.empty()
         self._positions = PositionManager(repository)
+        self._management_rules = ManagementRuleEngine(repository, self._positions)
         self._intake = TradeIntakeManager(
             repository, positions_provider=lambda: self._positions.list_positions(open_only=True)
         )
@@ -753,6 +759,85 @@ class CoreTMManager:
             self._refresh_position_context(source="POSITION")
             return adopted, profile
 
+
+    def add_position_management_rule(
+        self,
+        position_id: str,
+        spec: ManagementRuleSpec,
+        *,
+        created_at: datetime,
+    ) -> PositionManagementRule:
+        """Attach one explicit deterministic rule to an open MANAGED position."""
+        with self._lock:
+            self._ensure_started()
+            rule, events = self._management_rules.add_rule(
+                position_id, spec, created_at=created_at
+            )
+            for event in events:
+                self._record_event(event)
+            self._refresh_position_context(source="POSITION")
+            return rule
+
+    def install_position_management_policy(
+        self,
+        position_id: str,
+        policy_name: str,
+        specs: list[ManagementRuleSpec],
+        *,
+        created_at: datetime,
+    ) -> list[PositionManagementRule]:
+        """Install a named batch of deterministic management rules."""
+        with self._lock:
+            self._ensure_started()
+            rules, events = self._management_rules.install_policy(
+                position_id, policy_name, specs, created_at=created_at
+            )
+            for event in events:
+                self._record_event(event)
+            self._refresh_position_context(source="POSITION")
+            return rules
+
+    def evaluate_position_management(
+        self,
+        position_id: str,
+        snapshot: PositionManagementSnapshot,
+    ) -> list[ManagementRuleEvaluation]:
+        """Evaluate managed-position rules; emits signals only, never execution."""
+        with self._lock:
+            self._ensure_started()
+            evaluations, events = self._management_rules.evaluate(position_id, snapshot)
+            for event in events:
+                self._record_event(event)
+            self._refresh_position_context(source="POSITION")
+            return evaluations
+
+    def cancel_position_management_rule(
+        self,
+        rule_id: str,
+        *,
+        at: datetime,
+        cancelled_by: str,
+        reason: str,
+    ) -> PositionManagementRule:
+        with self._lock:
+            self._ensure_started()
+            rule, events = self._management_rules.cancel_rule(
+                rule_id, at=at, cancelled_by=cancelled_by, reason=reason
+            )
+            for event in events:
+                self._record_event(event)
+            self._refresh_position_context(source="POSITION")
+            return rule
+
+    def position_management_rules_snapshot(
+        self, *, position_id: str | None = None, active_only: bool = False
+    ) -> list[PositionManagementRule]:
+        with self._lock:
+            self._ensure_started()
+            return self._management_rules.list_rules(
+                position_id=position_id, active_only=active_only
+            )
+
     def position_management_profile(
         self, position_id: str
     ) -> PositionManagementProfile | None:
@@ -861,12 +946,20 @@ class CoreTMManager:
     def _refresh_position_context(self, *, source: str | None = None) -> None:
         positions = self._repository.list_positions()
         open_positions = [position for position in positions if position.is_open]
+        rules = self._management_rules.list_rules()
+        active_rules = [r for r in rules if r.status.value not in {"TRIGGERED", "CANCELLED"}]
+        triggered_rules = [r for r in rules if r.status.value == "TRIGGERED"]
         data = {
             "total_known": len(positions),
             "open": len(open_positions),
             "closed": len(positions) - len(open_positions),
             "managed_open": len([p for p in open_positions if p.is_managed]),
             "unmanaged_open": len([p for p in open_positions if not p.is_managed]),
+            "management_rules": {
+                "total": len(rules),
+                "active": len(active_rules),
+                "triggered": len(triggered_rules),
+            },
         }
         context = self._contexts.get("position")
         if context.data != data:
