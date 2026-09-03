@@ -1,25 +1,26 @@
-"""Professional console views for the TM1 runtime."""
+"""Professional console/control-room views for the TM1 runtime."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from trademonitor.domain.models import PositionRecord
+from trademonitor.domain.models import AttentionItem, PositionRecord
 
 
 class ConsoleUI:
-    """Render concise runtime/position status without owning business logic."""
+    """Render concise runtime state without owning business logic."""
 
     def render_status(self, snapshot: Mapping[str, Mapping[str, Any]]) -> str:
-        lines = ["TradeMonitor TM1/TGT2", "=" * 48]
+        lines = ["TradeMonitor TM1/TGT3", "=" * 72]
         health = snapshot.get("health", {}).get("data", {})
         broker = snapshot.get("broker", {}).get("data", {})
         positions = snapshot.get("position", {}).get("data", {})
         lines.append(
-            "Core: {core} | Runtime: {runtime} | Live execution: {live}".format(
+            "Core: {core} | Runtime: {runtime} | Mode: {mode} | Live execution: {live}".format(
                 core=health.get("core", "UNKNOWN"),
                 runtime=health.get("runtime", "UNKNOWN"),
+                mode=health.get("execution_mode", "PAPER"),
                 live="ENABLED" if health.get("live_execution_enabled") else "DISABLED",
             )
         )
@@ -32,31 +33,70 @@ class ConsoleUI:
             )
         )
         lines.append("")
+        lines.append("Domain Health")
+        domains = health.get("domains", {})
+        if not domains:
+            lines.append("- no domain health reports")
+        else:
+            for name in sorted(domains):
+                report = domains[name]
+                lines.append(
+                    f"- {name:<12} {report.get('status', 'UNKNOWN'):<11} "
+                    f"{report.get('summary', '')}"
+                )
+                for impact in report.get("impact", []):
+                    lines.append(f"    impact: {impact}")
+                for capability, state in sorted(report.get("capabilities", {}).items()):
+                    lines.append(f"    {capability}: {state}")
+        lines.append("")
         lines.append("Runtime Contexts")
         for name in sorted(snapshot):
             ctx = snapshot[name]
             lines.append(
-                f"- {name:<9} v{ctx.get('version', 0):<3} "
-                f"updated={ctx.get('updated_at', 'n/a')}"
+                f"- {name:<9} v{ctx.get('version', 0):<3} updated={ctx.get('updated_at', 'n/a')}"
             )
         lines.append("")
         lines.append("BROKER ACCESS IS READ-ONLY — NO LIVE TRADING CAPABILITY")
         return "\n".join(lines)
 
     def render_positions(self, positions: Sequence[PositionRecord]) -> str:
-        lines = ["Positions", "=" * 86]
+        lines = ["Positions", "=" * 96]
         if not positions:
             lines.append("No broker positions known to TradeMonitor.")
             return "\n".join(lines)
 
         lines.append(
-            f"{'SYMBOL':<28} {'BROKER':<9} {'QTY':>8} {'AVG':>10} {'MGMT':<10} {'STATE':<8}"
+            f"{'SYMBOL':<30} {'BROKER':<10} {'QTY':>8} {'AVG':>11} {'LTP':>11} {'MGMT':<10} {'STATE':<8}"
         )
-        lines.append("-" * 86)
+        lines.append("-" * 96)
         for position in positions:
+            ltp = "-" if position.last_price is None else str(position.last_price)
             lines.append(
-                f"{position.symbol:<28} {position.broker:<9} {position.quantity:>8} "
-                f"{str(position.average_price):>10} {position.management_status.value:<10} "
-                f"{position.state.value:<8}"
+                f"{position.symbol:<30} {position.broker:<10} {position.quantity:>8} "
+                f"{str(position.average_price):>11} {ltp:>11} "
+                f"{position.management_status.value:<10} {position.state.value:<8}"
             )
         return "\n".join(lines)
+
+    def render_attention(self, items: Sequence[AttentionItem]) -> str:
+        lines = ["Attention", "=" * 96]
+        if not items:
+            lines.append("No open attention items.")
+            return "\n".join(lines)
+        lines.append(f"{'LEVEL':<10} {'SOURCE':<12} {'TITLE':<34} DETAIL")
+        lines.append("-" * 96)
+        for item in items:
+            lines.append(
+                f"{item.level:<10} {item.source:<12} {item.title:<34} {item.detail}"
+            )
+        return "\n".join(lines)
+
+    def render_control_room(self, snapshot: Mapping[str, Any]) -> str:
+        """Render one coherent operator view: health, positions, attention."""
+        return "\n\n".join(
+            [
+                self.render_status(snapshot.get("contexts", {})),
+                self.render_positions(snapshot.get("positions", [])),
+                self.render_attention(snapshot.get("attention", [])),
+            ]
+        )

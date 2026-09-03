@@ -30,3 +30,19 @@ Broker reconciliation produces structured position events and refreshes durable 
 ## Safety Boundary
 
 TM1/TGT2 has **NO LIVE TRADING CAPABILITY**. The Broker contract in this target has no order submission, modification, cancellation, exit, hedge, or adoption method.
+
+## TM1/TGT3 Health and Fault Containment
+
+TradeMonitor uses a hybrid fault model consistent with the TM0 thesis.
+
+**Vertical ownership:** a child/component reports failure to the nearest competent parent/domain owner first. That owner handles/retries/degrades locally when safe. Only unresolved faults propagate upward, carrying summarized domain meaning and impact.
+
+**Horizontal ownership:** peer domains are responsible for containing their own failures and reporting health/impact to the Core TM Manager. A failing non-critical peer does not automatically collapse unrelated peers.
+
+Core coordinates the coherent health picture; it is not a global raw-exception handler.
+
+## TM1/TGT3 Control Room
+
+The console is an operational control-room view, not a scrolling business-logic owner. It renders one coherent snapshot containing domain health, capability impact, unified Positions (`MANAGED` / `UNMANAGED`), and an Attention queue. Attention is durable across restart.
+
+TM1/TGT3 remains PAPER-only and broker-read-only.

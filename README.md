@@ -10,27 +10,25 @@ The canonical design references are kept under `docs/`:
 
 ## Current Status
 
-**TM1 / TGT2 — Broker Truth and Position Reconciliation**
+**TM1 / TGT3 — Health, Fault Containment and Control Room**
 
-TM1/TGT1 is frozen. TGT2 adds the read-only broker-truth and durable position-reconciliation foundation:
+TM1/TGT1 and TGT2 are frozen. TGT3 adds the operational health/fault architecture and professional control-room baseline:
 
 - Core TM Manager and canonical runtime contexts
 - explicit synchronous event boundary and durable audit log
 - SQLite persistence/restart foundation
-- read-only Broker account snapshot contract
-- deterministic `MockBroker` for PAPER/integration validation
-- durable canonical broker positions
-- unified `MANAGED` / `UNMANAGED` management status
-- broker-discovered positions default to `UNMANAGED`
-- broker quantity/state is accepted as truth during reconciliation
-- existing management status/provenance is preserved
-- positions survive restart and are reconciled again to broker reality
-- unified console position/status view
-- hard `UNMANAGED` read-only guard
+- read-only Broker account snapshot contract and broker-truth reconciliation
+- unified `MANAGED` / `UNMANAGED` positions
+- vertical nearest-owner fault containment and escalation
+- horizontal peer-domain fault isolation
+- domain health states and capability-specific impact reporting
+- durable operator Attention queue
+- unified control-room view for health, Positions, and Attention
+- PAPER mode made explicit; live execution remains disabled
 
-**NO LIVE TRADING CAPABILITY EXISTS IN TM1/TGT2.**
+**NO LIVE TRADING CAPABILITY EXISTS IN TM1/TGT3.**
 
-Real broker authentication/adapters, adoption, Risk Management rules, trade intake/entry logic, Agents, position-management policies, Exit Monitor, and Module M execution are later targets per the roadmap.
+Real broker authentication/adapters, adoption management, Risk Management policies, trade intake/entry logic, Agents integration, position-management policies, Exit Monitor, and Module M execution remain later roadmap targets.
 
 ## Development Setup
 

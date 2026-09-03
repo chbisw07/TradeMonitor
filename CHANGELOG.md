@@ -1,5 +1,15 @@
 # Changelog
 
+## Version 0.1.2 / TM1-TGT3 — Health, Fault Containment and Control Room
+
+- Added domain health reporting with capability-specific impact.
+- Added vertical nearest-owner fault containment/escalation semantics.
+- Added horizontal peer-domain degradation without global collapse.
+- Added durable operator Attention queue.
+- Added unified control-room rendering for health, positions, and attention.
+- Added broker degraded-mode behavior and operator visibility.
+- Preserved PAPER-only runtime and zero broker write capability.
+
 ## Version 0.1.1 / TM1-TGT2 — Broker Truth and Position Reconciliation
 
 - Added read-only broker account snapshot contract and deterministic MockBroker.

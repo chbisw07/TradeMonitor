@@ -11,3 +11,8 @@
 - AUTO mode must not be enabled until PAPER and SEMI_AUTO evidence justifies it.
 - Consequential state changes and Risk Management blocks/interventions must be auditable/timestamped.
 - TM1/TGT2 contains no broker write operations.
+- A failed subsystem must never silently increase TM capability or authority.
+- A non-critical horizontal domain failure must not unnecessarily collapse unrelated domains.
+- Vertical failures are handled by the nearest competent owner before escalation.
+- Broker truth becoming unavailable must be surfaced; stale/unknown broker state must not be treated as current truth.
+- TM1/TGT3 remains PAPER-only with no broker write operations.

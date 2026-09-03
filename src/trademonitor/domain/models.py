@@ -245,3 +245,43 @@ class PositionRecord:
             first_seen_at=datetime.fromisoformat(str(record["first_seen_at"])),
             updated_at=datetime.fromisoformat(str(record["updated_at"])),
         )
+
+
+@dataclass(frozen=True)
+class AttentionItem:
+    """Durable operator-facing item surfaced by the TM control room."""
+
+    attention_id: str
+    level: str
+    source: str
+    title: str
+    detail: str
+    status: str
+    created_at: datetime
+    resolved_at: datetime | None = None
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "attention_id": self.attention_id,
+            "level": self.level,
+            "source": self.source,
+            "title": self.title,
+            "detail": self.detail,
+            "status": self.status,
+            "created_at": self.created_at.isoformat(),
+            "resolved_at": None if self.resolved_at is None else self.resolved_at.isoformat(),
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "AttentionItem":
+        resolved = record.get("resolved_at")
+        return cls(
+            attention_id=str(record["attention_id"]),
+            level=str(record["level"]),
+            source=str(record["source"]),
+            title=str(record["title"]),
+            detail=str(record.get("detail", "")),
+            status=str(record["status"]),
+            created_at=datetime.fromisoformat(str(record["created_at"])),
+            resolved_at=datetime.fromisoformat(str(resolved)) if resolved else None,
+        )

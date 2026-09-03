@@ -11,8 +11,17 @@ The previous TM0 placeholder milestone list is superseded by the four-milestone 
 
 **TM1 — Core Foundation**
 
-Completed and frozen: **TGT1 — Core TM Manager and Runtime Contexts**
+Completed and frozen:
 
-Current target: **TGT2 — Broker Truth and Position Reconciliation**
+- **TGT1 — Core TM Manager and Runtime Contexts**
+- **TGT2 — Broker Truth and Position Reconciliation**
 
-TM1/TGT2 establishes a read-only broker snapshot contract, durable broker-truth reconciliation, unified `MANAGED` / `UNMANAGED` positions, persistence across restart, and explicit enforcement of the unmanaged read-only boundary. It contains **no live broker write capability**.
+Current implementation target completed in this working tree:
+
+- **TGT3 — Health, Fault Containment and Control Room**
+
+TM1/TGT3 adds domain health reporting, vertical nearest-owner fault containment/escalation, horizontal peer-domain isolation, capability-specific degradation, a durable Attention queue, and a unified control-room view. It preserves the read-only broker boundary and contains **no live broker write capability**.
+
+Next roadmap target after TGT3 acceptance/freeze:
+
+- **TGT4 — PAPER Runtime, Recovery and Replay Validation**
