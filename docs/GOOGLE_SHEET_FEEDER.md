@@ -88,4 +88,19 @@ If Setup is absent, the configured default `TOP_PICK` is used. If Trade Type is 
 
 This feeder currently validates the **intake/de-duplication boundary** with real Google Sheet data. It preserves the complete source row as provenance.
 
-It does not automatically construct detailed EntryIntent trigger/confirmation rules from workbook-specific columns. That can be added as a later source-specific adapter enhancement once the real Top Picks rows have been observed and their semantics verified.
+After the Intake-only path has been verified, the feeder can optionally create canonical PAPER EntryIntents for Top Picks statuses whose semantics have been explicitly mapped. Use:
+
+```bash
+python scripts/feed_google_top_picks.py --limit 5 --create-entry-intents
+```
+
+Current conservative mappings are:
+
+- `BUY ON CONFIRM` -> arm the candidate at its Spot Entry Zone and require a directionally supportive completed-candle confirmation.
+- `WAIT FOR PULLBACK` -> wait for price to return to the Spot Entry Zone, then require a directionally supportive completed-candle confirmation.
+- `AVOID CHASE` -> keep the opportunity in Intake but do **not** arm an EntryIntent.
+- Unknown/unverified statuses -> do not guess; keep Intake only and report why no EntryIntent was armed.
+
+Spot/Premium Entry Zones, Invalidation, expiry, strike and contract are translated at the adapter boundary. The source Confirmation text remains preserved as provenance. TradeMonitor core does not know Google Sheet column names.
+
+This still does not provide a market-data loop. Created EntryIntents remain `MONITORING` until an external market-data/provider path supplies `EntryMarketSnapshot` evaluations.

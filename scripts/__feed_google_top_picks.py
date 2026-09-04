@@ -200,44 +200,6 @@ def _read_top_picks_rows(config: GoogleSheetConfig) -> tuple[list[GoogleSheetRow
     return virtual_rows, header_idx + 1, ce_count, pe_count
 
 
-
-def _entry_marker_key(state_key: str) -> str:
-    """Adapter-local marker showing EntryIntent translation was already handled.
-
-    This is intentionally kept in FeederState rather than TM core.  It lets an
-    unchanged Sheet row be used once for EntryIntent backfill after a feeder
-    upgrade, then become fully idempotent on later runs.
-    """
-    return f"{state_key}:ENTRY_INTENT"
-
-
-def _entry_already_exists(entries: list[Any], observation: Any) -> bool:
-    """Best-effort guard for one-time backfill against already armed intents.
-
-    Used only when the Sheet row itself is unchanged.  Changed rows always go
-    through normal Intake reconciliation, so this guard cannot hide a genuine
-    source update/new episode.
-    """
-    intent = observation.intent
-    wanted_underlying = str(intent.underlying or "").strip().upper()
-    wanted_option_type = str(intent.option_type or "").strip().upper()
-    wanted_contract = _norm(intent.contract_symbol)
-    wanted_trade_type = str(intent.trade_type or "").strip().upper()
-
-    for entry in entries:
-        if str(getattr(entry, "underlying", "") or "").strip().upper() != wanted_underlying:
-            continue
-        if wanted_option_type and str(getattr(entry, "option_type", "") or "").strip().upper() != wanted_option_type:
-            continue
-        entry_trade_type = getattr(entry, "trade_type", "")
-        entry_trade_type = getattr(entry_trade_type, "value", entry_trade_type)
-        if wanted_trade_type and str(entry_trade_type or "").strip().upper() != wanted_trade_type:
-            continue
-        if wanted_contract and _norm(getattr(entry, "contract_symbol", "")) != wanted_contract:
-            continue
-        return True
-    return False
-
 def main() -> int:
     args = _args()
     load_dotenv_file(args.env_file)
@@ -284,64 +246,19 @@ def main() -> int:
     state = FeederState(config.state_file)
     selected = []
     unchanged = 0
-    backfill_satisfied = 0
-    marker_seeded = False
-
-    # For an unchanged row, EntryIntent backfill is needed only once.  The
-    # marker handles future runs.  For installations upgraded from the earlier
-    # feeder (which have no marker yet), inspect the current active EntryIntents
-    # so we do not re-ingest a row that is already armed.
-    existing_entries: list[Any] = []
-    probe_manager = None
-    if args.create_entry_intents and not args.dry_run and not args.force:
-        probe_manager = build_manager()
-        probe_manager.start()
-        try:
-            existing_entries = probe_manager.entry_snapshot()
-        finally:
-            probe_manager.stop()
-
     for item in prepared:
         state_key = (
             f"{config.spreadsheet_id}:{config.sheet_name}:"
             f"{item.row_number}:{item.observation.src_id}"
         )
-        row_unchanged = (not args.force and state.unchanged(state_key, item.fingerprint))
-        if row_unchanged:
+        if not args.force and state.unchanged(state_key, item.fingerprint):
             unchanged += 1
             if not args.create_entry_intents:
                 continue
-
-            translation = translate_top_pick_to_entry(item.observation)
-
-            # A non-armed status (for example AVOID CHASE) requires no TM
-            # EntryIntent backfill.  It is already fully represented by Intake.
-            if not translation.arm:
-                backfill_satisfied += 1
-                continue
-
-            marker_key = _entry_marker_key(state_key)
-            if state.unchanged(marker_key, item.fingerprint):
-                backfill_satisfied += 1
-                continue
-
-            # Upgrade compatibility: earlier feeder versions created the
-            # EntryIntent but did not persist an adapter-local backfill marker.
-            # If the intent is already present, seed the marker and skip Intake.
-            if _entry_already_exists(existing_entries, item.observation):
-                state.remember(marker_key, item.fingerprint)
-                marker_seeded = True
-                backfill_satisfied += 1
-                continue
-
-            # Truly missing EntryIntent: allow one-time backfill.  This is the
-            # only unchanged-row case that is processed.
         selected.append((item, state_key))
 
     print(f"Rows mapped : {len(prepared)}")
     print(f"Unchanged   : {unchanged}")
-    if args.create_entry_intents and unchanged:
-        print(f"Backfill OK : {backfill_satisfied}")
     print(f"To process  : {len(selected)}")
     print()
 
@@ -378,11 +295,6 @@ def main() -> int:
         print("\nDRY RUN complete — TradeMonitor state was not changed.")
         return 0
 
-    # Persist any upgrade-compatibility EntryIntent markers even when there is
-    # nothing left to ingest.  This makes the next unchanged run a pure skip.
-    if marker_seeded:
-        state.save()
-
     manager = build_manager()
     manager.start()
     try:
@@ -409,10 +321,6 @@ def main() -> int:
                     entry_skipped += 1
                     print(f"ENTRY  R{item.row_number}: SKIPPED | {translation.reason}")
             state.remember(state_key, item.fingerprint)
-            if args.create_entry_intents:
-                # Mark translation handled whether it armed or deliberately
-                # skipped the row.  An unchanged row then needs no reprocessing.
-                state.remember(_entry_marker_key(state_key), item.fingerprint)
         state.save()
         counts = manager.intake_snapshot()
         print("\nTM Intake totals:")

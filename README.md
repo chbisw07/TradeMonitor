@@ -105,3 +105,15 @@ TM_DATABASE_PATH=/tmp/trademonitor.db python scripts/run_dev.py
 
 ### TM3/TGT4
 Strategic exit proposals can now use the separate external Agents validation gate with `APPROVE / REJECT / RETREAT_WAIT`, User escalation on disagreement, and no broker-write capability. Protective/deterministic exits bypass the Agent gate.
+
+
+## Google Top Picks PAPER integration
+
+After validating Google Sheet intake, eligible Top Picks can be admitted to the generic Entry Monitor without exposing workbook schema to TM core:
+
+```bash
+python scripts/feed_google_top_picks.py --dry-run --limit 5 --create-entry-intents
+python scripts/feed_google_top_picks.py --limit 5 --create-entry-intents
+```
+
+This is still PAPER-only. It creates/recovers EntryIntents but does not provide a market-data loop or live broker writes.

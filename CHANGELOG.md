@@ -1,4 +1,10 @@
 
+## 0.4.2 - Google Top Picks EntryIntent PAPER bridge
+- Added source-specific Top Picks -> canonical EntryIntent translation at the adapter boundary.
+- Added conservative mappings for BUY ON CONFIRM and WAIT FOR PULLBACK; AVOID CHASE remains Intake-only.
+- Added `--create-entry-intents` to the PAPER Google feeder.
+- Preserved Google/worksheet semantics outside TM core; no broker writes added.
+
 ## 0.4.1 - Google Sheet PAPER integration harness
 
 - Added optional read-only Google Sheets adapter and `feed_google_top_picks.py`.
