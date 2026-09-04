@@ -1,5 +1,15 @@
 # Changelog
 
+## Version 0.3.4 — Source-Independence Architecture Hardening
+
+- Audited TM3/TGT4 for accidental Google Sheet/scanner schema coupling; core Intake/Entry/Risk/Position/Exit domains remain source-neutral.
+- Added the canonical `CanonicalTradeObservation` adapter handoff type.
+- Added generic `MappingTradeAdapter` for arbitrary external field-name mappings.
+- Added `INTEGRATION_INTERFACE.md`, `SETUP_AND_ADAPTERS.md`, and `TM_SOURCE_INDEPENDENCE_AUDIT.md`.
+- Reframed Google Sheets explicitly as an optional external adapter, never a core dependency.
+- Added tests proving canonical and arbitrary external payloads normalize through the same TM intake contract.
+- Preserved TM3/TGT4 behavior, PAPER-only operation, and zero broker-write capability.
+
 ## Version 0.3.3 / TM3-TGT4 — Exit Agents and Escalation
 
 - Added external Agents review packets/results and durable audit history for strategic exit proposals.

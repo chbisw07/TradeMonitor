@@ -1,6 +1,6 @@
 # TradeMonitor
 
-**Current milestone:** TM3/TGT4 — Exit Monitor and Position Evolution
+**Current milestone:** TM3/TGT4 — Exit Agents and Escalation
 
 TradeMonitor is being developed as a professional trade-monitoring, risk-governance, position-management, and execution system for Indian markets.
 
@@ -12,7 +12,7 @@ The canonical design references are kept under `docs/`:
 
 ## Current Status
 
-**TM3 / TGT2 — Deterministic Management Rules — COMPLETE**
+**TM3 / TGT4 — Exit Agents and Escalation — COMPLETE**
 
 TM1 and TM2 are complete. TM3 now includes deterministic managed-position rules:
 
@@ -24,9 +24,23 @@ TM1 and TM2 are complete. TM3 now includes deterministic managed-position rules:
 - triggered rules emit auditable `EXIT_REVIEW` signals only; they do not create ExecutionRequests
 - broker truth remains authoritative and `UNMANAGED` positions remain read-only
 
-**NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM3/TGT2.**
+**NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM3/TGT4.**
 
 TM3/TGT4 now provides durable PAPER-only exit proposals, partial-exit shapes, duplicate/conflicting exit suppression, DAY end-of-day protection, deliberate position holding-intent conversion, and broker-truth closure convergence. Module M and real execution remain TM4 scope.
+
+
+## Independent Program / Adapter Boundary
+
+TradeMonitor is not tied to the original Google Sheets or scanners. External sources must translate their own formats through adapters into TM's canonical intake contract. Supported/intended integration styles include direct console input, Python, REST/web, Google Sheets, DayScanner/Positional Scanner, and user-defined adapters.
+
+See:
+
+- `docs/INTEGRATION_INTERFACE.md`
+- `docs/SETUP_AND_ADAPTERS.md`
+- `docs/GOOGLE_SHEET_INTERFACE.md`
+- `docs/TM_SOURCE_INDEPENDENCE_AUDIT.md`
+
+A different user should be able to configure their own source and broker adapters without adopting this project's workbook schemas.
 
 ## Development Setup
 

@@ -118,3 +118,13 @@ The Exit Monitor is the Position/Exit domain owner for proposed position reducti
 ## TM3/TGT4 — Exit Agents boundary
 
 Strategic/ambiguous exit proposals may be delegated to the separate Agents service. The owning Position/Exit domain sends a bounded packet and receives exactly one of `APPROVE`, `REJECT`, or `RETREAT_WAIT`, plus optional advice. Agent approval can mark the proposal approved for later execution; disagreement or unavailability escalates to the User. Protective and deterministic exits do not wait for Agents. A higher-authority protective/deterministic trigger may promote an existing strategic full-exit proposal so safety is never held behind a lower-authority review. Agents never create broker actions or mutate managed-position rules directly.
+
+## Source-independent integration boundary
+
+TradeMonitor is an independent program. Source systems are peers outside the core and must enter through adapters that normalize their source-specific representation into the canonical TM intake contract.
+
+`External Source -> Source Adapter -> Canonical Trade Observation -> TM Intake -> Outcome -> Episode`
+
+No core domain may depend on Google Sheet workbook/sheet/column names, DayScanner/Positional Scanner field layouts, REST payload naming, or another user's proprietary schema. Direct console, Python, REST/web, Google Sheet, scanner, and future inputs must converge on the same Intake boundary. Source-specific parsing and connectivity remain adapter responsibilities.
+
+This boundary is intentionally compatible with the Unix-style architecture of small responsible components joined by explicit interfaces. A new source should normally be added without changes to Intake, Entry, Risk, Position/Exit, or Module M business logic.

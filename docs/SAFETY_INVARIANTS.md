@@ -116,3 +116,11 @@
 - A protective/deterministic trigger must not remain blocked behind a strategic Agent/User review.
 - Agent suggestions are logged advice only until the owning TM domain deliberately turns them into a new proposal/rule cycle.
 - TM3/TGT4 creates no broker write and no ExecutionRequest.
+
+## Source-independence invariants
+
+- TradeMonitor core domains must not depend on source-specific worksheet names, column names, payload keys, or proprietary formats.
+- Every external trade source must cross an adapter boundary into the canonical Intake contract.
+- Adding or removing a Google Sheet/scanner/web adapter must not alter core authority, Risk, Entry, Position/Exit, or execution semantics.
+- Direct/manual input must enter through the same Intake boundary and may not bypass de-duplication, Agents, Risk Management, or later Module M controls.
+- Source repetition or source count never grants execution authority and never implies scale-in.
