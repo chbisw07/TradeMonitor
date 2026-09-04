@@ -12,6 +12,7 @@ from decimal import Decimal
 import hashlib
 from typing import Any
 
+from trademonitor.brokers.base import Broker
 from trademonitor.brokers.execution import ExecutionBroker
 from trademonitor.domain.enums import BrokerOrderStatus, OrderSide, OrderType
 from trademonitor.domain.models import (
@@ -39,6 +40,128 @@ def _tag(client_order_id: str) -> str:
 
 class ZerodhaDependencyError(RuntimeError):
     pass
+
+
+
+
+def _build_kite_client(*, api_key: str | None, access_token: str | None, kite: Any | None) -> Any:
+    """Construct/authenticate Kite lazily so read-only use stays an optional dependency."""
+    if kite is not None:
+        return kite
+    try:
+        from kiteconnect import KiteConnect  # type: ignore
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise ZerodhaDependencyError(
+            "Zerodha support is optional. Install with: pip install -e '[zerodha]'"
+        ) from exc
+    if not api_key or not access_token:
+        raise ValueError("ZERODHA_API_KEY and ZERODHA_ACCESS_TOKEN are required")
+    client = KiteConnect(api_key=api_key)
+    client.set_access_token(access_token)
+    return client
+
+
+def _fetch_account_snapshot(*, kite: Any, broker_name: str) -> BrokerAccountSnapshot:
+    """Map Zerodha factual account state into TM's broker-neutral snapshot."""
+    observed = utc_now()
+    raw_positions = kite.positions() or {}
+    net = raw_positions.get("net", []) if isinstance(raw_positions, dict) else []
+    positions: list[BrokerPositionSnapshot] = []
+    for row in net:
+        exchange = str(row.get("exchange") or "")
+        symbol = str(row.get("tradingsymbol") or "")
+        product = str(row.get("product") or "")
+        if not exchange or not symbol or not product:
+            continue
+        qty = int(row.get("quantity") or 0)
+        # Kite's net book can retain fully closed rows with quantity=0 during the
+        # day. TM's account snapshot represents current exposure; absence of a
+        # previously-open position is what drives broker-truth closure.
+        if qty == 0:
+            continue
+        positions.append(
+            BrokerPositionSnapshot(
+                broker=broker_name,
+                broker_position_key=f"{exchange}:{symbol}:{product}",
+                exchange=exchange,
+                symbol=symbol,
+                product=product,
+                quantity=qty,
+                average_price=row.get("average_price") or 0,
+                last_price=row.get("last_price"),
+                realized_pnl=row.get("realised") if row.get("realised") is not None else row.get("realized"),
+                unrealized_pnl=row.get("unrealised") if row.get("unrealised") is not None else row.get("unrealized"),
+                instrument_token=(None if row.get("instrument_token") is None else str(row.get("instrument_token"))),
+                observed_at=observed,
+            )
+        )
+
+    funds = None
+    try:
+        margins = kite.margins("equity") or {}
+        available = margins.get("available", {}) if isinstance(margins, dict) else {}
+        utilised = margins.get("utilised", {}) if isinstance(margins, dict) else {}
+        funds = BrokerFundsSnapshot.create(
+            available_cash=available.get("cash") or available.get("live_balance"),
+            used_margin=utilised.get("debits") or utilised.get("span") or utilised.get("exposure"),
+            net_value=margins.get("net") if isinstance(margins, dict) else None,
+        )
+    except Exception:
+        # Positions remain usable broker truth even if the margins endpoint is unavailable.
+        funds = None
+
+    try:
+        order_count = len(kite.orders() or [])
+    except Exception:
+        order_count = None
+    try:
+        fill_count = len(kite.trades() or [])
+    except Exception:
+        fill_count = None
+
+    return BrokerAccountSnapshot.create(
+        broker=broker_name,
+        positions=positions,
+        funds=funds,
+        order_count=order_count,
+        fill_count=fill_count,
+        observed_at=observed,
+    )
+
+
+class ZerodhaReadOnlyBroker(Broker):
+    """Strict Zerodha truth adapter with no order-mutation capability.
+
+    Use this adapter for initial account connection and reconciliation. It does
+    not inherit ExecutionBroker and intentionally exposes no place/modify/cancel
+    methods, making accidental broker writes impossible through this object.
+    """
+
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        access_token: str | None = None,
+        kite: Any | None = None,
+        name: str = "ZERODHA",
+    ) -> None:
+        self._name = name
+        self._kite = _build_kite_client(api_key=api_key, access_token=access_token, kite=kite)
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def fetch_account_snapshot(self) -> BrokerAccountSnapshot:
+        return _fetch_account_snapshot(kite=self._kite, broker_name=self._name)
+
+    @classmethod
+    def from_env(cls) -> "ZerodhaReadOnlyBroker":
+        import os
+        return cls(
+            api_key=os.getenv("ZERODHA_API_KEY"),
+            access_token=os.getenv("ZERODHA_ACCESS_TOKEN"),
+        )
 
 
 class ZerodhaExecutionBroker(ExecutionBroker):
@@ -76,67 +199,7 @@ class ZerodhaExecutionBroker(ExecutionBroker):
         return False
 
     def fetch_account_snapshot(self) -> BrokerAccountSnapshot:
-        observed = utc_now()
-        raw_positions = self._kite.positions() or {}
-        net = raw_positions.get("net", []) if isinstance(raw_positions, dict) else []
-        positions: list[BrokerPositionSnapshot] = []
-        for row in net:
-            exchange = str(row.get("exchange") or "")
-            symbol = str(row.get("tradingsymbol") or "")
-            product = str(row.get("product") or "")
-            if not exchange or not symbol or not product:
-                continue
-            qty = int(row.get("quantity") or 0)
-            positions.append(
-                BrokerPositionSnapshot(
-                    broker=self._name,
-                    broker_position_key=f"{exchange}:{symbol}:{product}",
-                    exchange=exchange,
-                    symbol=symbol,
-                    product=product,
-                    quantity=qty,
-                    average_price=row.get("average_price") or 0,
-                    last_price=row.get("last_price"),
-                    realized_pnl=row.get("realised") if row.get("realised") is not None else row.get("realized"),
-                    unrealized_pnl=row.get("unrealised") if row.get("unrealised") is not None else row.get("unrealized"),
-                    instrument_token=(None if row.get("instrument_token") is None else str(row.get("instrument_token"))),
-                    observed_at=observed,
-                )
-            )
-
-        funds = None
-        try:
-            margins = self._kite.margins("equity") or {}
-            available = margins.get("available", {}) if isinstance(margins, dict) else {}
-            utilised = margins.get("utilised", {}) if isinstance(margins, dict) else {}
-            funds = BrokerFundsSnapshot.create(
-                available_cash=available.get("cash") or available.get("live_balance"),
-                used_margin=utilised.get("debits") or utilised.get("span") or utilised.get("exposure"),
-                net_value=margins.get("net") if isinstance(margins, dict) else None,
-            )
-        except Exception:
-            # Positions are still useful broker truth even if the margin endpoint is unavailable.
-            funds = None
-
-        try:
-            orders = self._kite.orders() or []
-            order_count = len(orders)
-        except Exception:
-            order_count = None
-        try:
-            trades = self._kite.trades() or []
-            fill_count = len(trades)
-        except Exception:
-            fill_count = None
-
-        return BrokerAccountSnapshot.create(
-            broker=self._name,
-            positions=positions,
-            funds=funds,
-            order_count=order_count,
-            fill_count=fill_count,
-            observed_at=observed,
-        )
+        return _fetch_account_snapshot(kite=self._kite, broker_name=self._name)
 
     def resolve_instrument(
         self, *, exchange: str, symbol: str, product: str, instrument_token: str | None = None

@@ -135,3 +135,14 @@ This is still PAPER-only. It creates/recovers EntryIntents but does not provide 
 - AUTO remains unavailable
 
 See `docs/TM4_TGT3_ACCEPTANCE.md` and `docs/ZERODHA_SEMI_AUTO.md`. The milestone is not operationally accepted until a deliberately tiny real-broker test has been completed and reviewed.
+
+## Zerodha strict read-only reconciliation
+
+Before any real SEMI_AUTO forward test, connect Zerodha through the strict read-only adapter:
+
+```bash
+python scripts/zerodha_read_only.py --no-persist
+python scripts/zerodha_read_only.py
+```
+
+This path has no order mutation methods and forcibly keeps real broker writes disabled. See `docs/ZERODHA_READ_ONLY_RECONCILIATION.md`.
