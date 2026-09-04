@@ -122,6 +122,18 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_exit_proposals_position_status
                     ON exit_proposals(position_id, status);
 
+                CREATE TABLE IF NOT EXISTS exit_reviews (
+                    review_id TEXT PRIMARY KEY,
+                    exit_proposal_id TEXT NOT NULL,
+                    record_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(exit_proposal_id) REFERENCES exit_proposals(proposal_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_exit_reviews_proposal_updated
+                    ON exit_reviews(exit_proposal_id, updated_at);
+
                                 CREATE TABLE IF NOT EXISTS intake_outcomes (
                     outcome_id TEXT PRIMARY KEY,
                     outcome_key TEXT NOT NULL UNIQUE,

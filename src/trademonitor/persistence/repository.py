@@ -20,6 +20,7 @@ from trademonitor.domain.models import (
     RiskProfileChange,
     PositionManagementRule,
     ExitProposal,
+    ExitReviewRecord,
 )
 from trademonitor.persistence.database import Database
 
@@ -74,48 +75,28 @@ class RuntimeRepository(ABC):
     def save_exit_proposal(self, record: Mapping[str, Any]) -> None: ...
 
     @abstractmethod
+    def get_exit_proposal(self, proposal_id: str) -> ExitProposal | None: ...
+
+    @abstractmethod
     def list_exit_proposals(
         self, *, position_id: str | None = None, active_only: bool = False
     ) -> list[ExitProposal]: ...
 
     @abstractmethod
+    def save_exit_review(self, record: Mapping[str, Any]) -> None: ...
 
-    def save_exit_proposal(self, record: Mapping[str, Any]) -> None:
-        with self._database.connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO exit_proposals(proposal_id, position_id, record_json, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(proposal_id) DO UPDATE SET
-                    record_json=excluded.record_json,
-                    status=excluded.status,
-                    updated_at=excluded.updated_at
-                """,
-                (
-                    str(record["proposal_id"]), str(record["position_id"]),
-                    json.dumps(dict(record), sort_keys=True, default=str), str(record["status"]),
-                    str(record["created_at"]), str(record["updated_at"]),
-                ),
-            )
+    @abstractmethod
+    def get_exit_review(self, review_id: str) -> ExitReviewRecord | None: ...
 
-    def list_exit_proposals(
-        self, *, position_id: str | None = None, active_only: bool = False
-    ) -> list[ExitProposal]:
-        query = "SELECT record_json FROM exit_proposals"
-        clauses: list[str] = []
-        params: list[Any] = []
-        if position_id is not None:
-            clauses.append("position_id = ?")
-            params.append(position_id)
-        if active_only:
-            clauses.append("status = 'PENDING'")
-        if clauses:
-            query += " WHERE " + " AND ".join(clauses)
-        query += " ORDER BY created_at, proposal_id"
-        with self._database.connect() as connection:
-            rows = connection.execute(query, tuple(params)).fetchall()
-        return [ExitProposal.from_record(json.loads(row["record_json"])) for row in rows]
+    @abstractmethod
+    def get_latest_exit_review(self, exit_proposal_id: str) -> ExitReviewRecord | None: ...
 
+    @abstractmethod
+    def list_exit_reviews(
+        self, *, exit_proposal_id: str | None = None
+    ) -> list[ExitReviewRecord]: ...
+
+    @abstractmethod
     def save_source_observation(self, record: Mapping[str, Any]) -> None: ...
 
     @abstractmethod
@@ -502,13 +483,75 @@ class SQLiteRuntimeRepository(RuntimeRepository):
             clauses.append("position_id = ?")
             params.append(position_id)
         if active_only:
-            clauses.append("status = 'PENDING'")
+            clauses.append("status IN ('PENDING', 'APPROVED')")
         if clauses:
             query += " WHERE " + " AND ".join(clauses)
         query += " ORDER BY created_at, proposal_id"
         with self._database.connect() as connection:
             rows = connection.execute(query, tuple(params)).fetchall()
         return [ExitProposal.from_record(json.loads(row["record_json"])) for row in rows]
+
+    def get_exit_proposal(self, proposal_id: str) -> ExitProposal | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM exit_proposals WHERE proposal_id = ?",
+                (proposal_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return ExitProposal.from_record(json.loads(row["record_json"]))
+
+    def save_exit_review(self, record: Mapping[str, Any]) -> None:
+        with self._database.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO exit_reviews(review_id, exit_proposal_id, record_json, status, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(review_id) DO UPDATE SET
+                    record_json=excluded.record_json,
+                    status=excluded.status,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    str(record["review_id"]), str(record["exit_proposal_id"]),
+                    json.dumps(dict(record), sort_keys=True, default=str),
+                    str(record["status"]), str(record["updated_at"]),
+                ),
+            )
+
+    @staticmethod
+    def _exit_review_from_row(row) -> ExitReviewRecord | None:
+        if row is None:
+            return None
+        return ExitReviewRecord.from_record(json.loads(row["record_json"]))
+
+    def get_exit_review(self, review_id: str) -> ExitReviewRecord | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM exit_reviews WHERE review_id = ?", (review_id,)
+            ).fetchone()
+        return self._exit_review_from_row(row)
+
+    def get_latest_exit_review(self, exit_proposal_id: str) -> ExitReviewRecord | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                """SELECT record_json FROM exit_reviews WHERE exit_proposal_id = ?
+                   ORDER BY updated_at DESC, review_id DESC LIMIT 1""",
+                (exit_proposal_id,),
+            ).fetchone()
+        return self._exit_review_from_row(row)
+
+    def list_exit_reviews(self, *, exit_proposal_id: str | None = None) -> list[ExitReviewRecord]:
+        sql = "SELECT record_json FROM exit_reviews"
+        params: tuple[Any, ...] = ()
+        if exit_proposal_id is not None:
+            sql += " WHERE exit_proposal_id = ?"
+            params = (exit_proposal_id,)
+        sql += " ORDER BY updated_at, review_id"
+        with self._database.connect() as connection:
+            rows = connection.execute(sql, params).fetchall()
+        return [ExitReviewRecord.from_record(json.loads(row["record_json"])) for row in rows]
+
 
     def save_source_observation(self, record: Mapping[str, Any]) -> None:
         with self._database.connect() as connection:

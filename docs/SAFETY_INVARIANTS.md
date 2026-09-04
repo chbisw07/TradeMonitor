@@ -105,3 +105,14 @@
 - DAY end-of-day handling cannot silently convert a DAY position into overnight exposure.
 - Position conversion is explicit, user-attributed, reasoned, logged, and changes TM intent only.
 - Broker-confirmed closure overrides internal exit expectations and satisfies pending proposals.
+
+
+## TM3/TGT4 Exit-review invariants
+
+- Agents are advisory and external; they never own or execute an exit.
+- `REJECT` / `RETREAT_WAIT` from Agents cannot silently cancel an otherwise valid TM decision; they escalate to the User.
+- Agent failure never implies `APPROVE`.
+- Protective/deterministic exits never wait for Agent approval.
+- A protective/deterministic trigger must not remain blocked behind a strategic Agent/User review.
+- Agent suggestions are logged advice only until the owning TM domain deliberately turns them into a new proposal/rule cycle.
+- TM3/TGT4 creates no broker write and no ExecutionRequest.

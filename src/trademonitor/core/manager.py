@@ -37,6 +37,7 @@ from trademonitor.domain.models import (
     PositionManagementSnapshot,
     ManagementRuleEvaluation,
     ExitProposal,
+    ExitReviewRecord,
     PositionConversionRequest,
 )
 from trademonitor.entry.monitor import EntryMonitor
@@ -45,6 +46,7 @@ from trademonitor.persistence.repository import RuntimeRepository
 from trademonitor.positions.manager import PositionAdoptionError, PositionManager
 from trademonitor.positions.rules import ManagementRuleEngine
 from trademonitor.positions.exit import ExitMonitor
+from trademonitor.positions.review import ExitReviewCoordinator
 from trademonitor.risk.engine import RiskEngine
 
 
@@ -63,6 +65,7 @@ class CoreTMManager:
         self._positions = PositionManager(repository)
         self._management_rules = ManagementRuleEngine(repository, self._positions)
         self._exit = ExitMonitor(repository, self._positions)
+        self._exit_review = ExitReviewCoordinator(repository, self._positions)
         self._intake = TradeIntakeManager(
             repository, positions_provider=lambda: self._positions.list_positions(open_only=True)
         )
@@ -904,6 +907,81 @@ class CoreTMManager:
             self._ensure_started()
             return self._exit.list_proposals(position_id=position_id, active_only=active_only)
 
+    def request_exit_agent_review(
+        self,
+        exit_proposal_id: str,
+        gateway: AgentGateway,
+        *,
+        requested_at: datetime | None = None,
+    ) -> ExitProposal:
+        """Request independent review of one strategic exit proposal.
+
+        APPROVE marks the proposal approved for the later TM4 execution stage.
+        REJECT / RETREAT_WAIT, Agent failure, or protocol failure escalates to the
+        User. Protective/deterministic exits do not wait for Agents.
+        """
+        with self._lock:
+            self._ensure_started()
+            proposal, review, events = self._exit_review.request_review(
+                exit_proposal_id, gateway, requested_at=requested_at
+            )
+            for event in events:
+                self._record_event(event)
+            needs_user = (
+                review.status.value == "FAILED"
+                or (
+                    review.result is not None
+                    and review.result.verdict in {AgentVerdict.REJECT, AgentVerdict.RETREAT_WAIT}
+                )
+            )
+            if needs_user:
+                verdict = review.result.verdict.value if review.result is not None else "AGENT_UNAVAILABLE"
+                suggestion = (
+                    f" Suggestion: {review.result.suggestion}"
+                    if review.result is not None and review.result.suggestion
+                    else ""
+                )
+                self.add_attention(
+                    level=AttentionLevel.ATTENTION,
+                    source="EXIT",
+                    title=f"User decision required: exit {exit_proposal_id}",
+                    detail=(
+                        f"Agents outcome={verdict}. Choose APPROVE / REJECT / "
+                        f"RETREAT_WAIT for this exit proposal.{suggestion}"
+                    ),
+                )
+            self._refresh_position_context(source="EXIT")
+            return proposal
+
+    def resolve_exit_agent_decision(
+        self,
+        exit_proposal_id: str,
+        decision: AgentVerdict | str,
+        *,
+        at: datetime,
+        reason: str,
+    ) -> ExitProposal:
+        """Record the User's higher-authority decision after Agent disagreement."""
+        with self._lock:
+            self._ensure_started()
+            proposal, _review, events = self._exit_review.resolve_user_decision(
+                exit_proposal_id, decision, at=at, reason=reason
+            )
+            for event in events:
+                self._record_event(event)
+            self._resolve_matching_attention(
+                source="EXIT", title=f"User decision required: exit {exit_proposal_id}"
+            )
+            self._refresh_position_context(source="EXIT")
+            return proposal
+
+    def exit_review_snapshot(
+        self, *, exit_proposal_id: str | None = None
+    ) -> list[ExitReviewRecord]:
+        with self._lock:
+            self._ensure_started()
+            return self._exit_review.list_reviews(exit_proposal_id=exit_proposal_id)
+
     def position_management_profile(
         self, position_id: str
     ) -> PositionManagementProfile | None:
@@ -1028,7 +1106,16 @@ class CoreTMManager:
             },
             "exit_proposals": {
                 "total": len(self._exit.list_proposals()),
-                "pending": len(self._exit.list_proposals(active_only=True)),
+                "active": len(self._exit.list_proposals(active_only=True)),
+                "pending": len([p for p in self._exit.list_proposals() if p.status.value == "PENDING"]),
+                "approved": len([p for p in self._exit.list_proposals() if p.status.value == "APPROVED"]),
+            },
+            "exit_agent_reviews": {
+                "total": len(self._exit_review.list_reviews()),
+                "by_status": {
+                    status: len([r for r in self._exit_review.list_reviews() if r.status.value == status])
+                    for status in sorted({r.status.value for r in self._exit_review.list_reviews()})
+                },
             },
         }
         context = self._contexts.get("position")

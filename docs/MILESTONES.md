@@ -23,11 +23,13 @@ The previous TM0 placeholder milestone list is superseded by the four-milestone 
 - TGT3 — External Agents Validation Gate
 - TGT4 — Risk Management Entry Gate
 
-**TM3 — Position Management + Exit: IN PROGRESS**
+**TM3 — Position Management + Exit: COMPLETE / FROZEN-CANDIDATE**
 
 - TGT1 — Position Manager and Adoption: **COMPLETE**
 - TGT2 — Deterministic Management Rules: **COMPLETE**
-- TGT3 — Exit Monitor and Position Evolution: **COMPLETE IN THIS WORKING TREE**
-- Next: TGT4 — Exit Agents and Escalation
+- TGT3 — Exit Monitor and Position Evolution: **COMPLETE**
+- TGT4 — Exit Agents and Escalation: **COMPLETE IN THIS WORKING TREE**
 
-TM3/TGT3 converts triggered management signals and explicit strategic requests into durable PAPER-only Exit Proposals, supports partial-exit intent, suppresses conflicting exit paths, protects DAY end-of-day behavior, supports deliberate holding-intent conversion, and converges to broker truth on closure. See `TM3_TGT3_ACCEPTANCE.md`.
+TM3/TGT4 adds the independent external Agents gate for strategic/ambiguous exits, User escalation on disagreement/unavailability, automatic bypass for protective/deterministic exits, and restart-safe exit-review history. See `TM3_TGT4_ACCEPTANCE.md`.
+
+**Next:** TM4/TGT1 — Module M and Broker Deployment.

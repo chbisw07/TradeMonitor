@@ -113,3 +113,8 @@ The Exit Monitor is the Position/Exit domain owner for proposed position reducti
 - Holding-intent conversion updates the Position Management Profile only; it is not a broker operation.
 - Broker truth remains final: if reconciliation shows the position closed, pending exit proposals are marked satisfied by broker reality.
 - `UNMANAGED` positions remain outside Exit Monitor authority.
+
+
+## TM3/TGT4 — Exit Agents boundary
+
+Strategic/ambiguous exit proposals may be delegated to the separate Agents service. The owning Position/Exit domain sends a bounded packet and receives exactly one of `APPROVE`, `REJECT`, or `RETREAT_WAIT`, plus optional advice. Agent approval can mark the proposal approved for later execution; disagreement or unavailability escalates to the User. Protective and deterministic exits do not wait for Agents. A higher-authority protective/deterministic trigger may promote an existing strategic full-exit proposal so safety is never held behind a lower-authority review. Agents never create broker actions or mutate managed-position rules directly.

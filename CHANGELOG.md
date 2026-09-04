@@ -1,5 +1,17 @@
 # Changelog
 
+## Version 0.3.3 / TM3-TGT4 — Exit Agents and Escalation
+
+- Added external Agents review packets/results and durable audit history for strategic exit proposals.
+- Added mandatory `APPROVE / REJECT / RETREAT_WAIT` exit verdict handling.
+- Added User escalation for Agent disagreement, unavailability, or protocol failure.
+- Added optional Agent suggestions as non-authoritative advice only.
+- Added automatic approval/bypass for deterministic and protective exit paths.
+- Added promotion of an existing strategic full-exit path when a higher-authority protective/deterministic trigger arrives.
+- Added restart-safe exit review and Attention persistence.
+- Preserved PAPER-only operation and zero broker-write / Module M capability.
+- Full suite: 101 tests passing.
+
 ## Version 0.3.2 / TM3-TGT3 — Exit Monitor and Position Evolution
 
 - Added durable Exit Monitor and Exit Proposal decision model.

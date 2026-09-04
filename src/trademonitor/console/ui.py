@@ -12,7 +12,7 @@ class ConsoleUI:
     """Render concise runtime state without owning business logic."""
 
     def render_status(self, snapshot: Mapping[str, Mapping[str, Any]]) -> str:
-        lines = ["TradeMonitor TM3/TGT3", "=" * 72]
+        lines = ["TradeMonitor TM3/TGT4", "=" * 72]
         health = snapshot.get("health", {}).get("data", {})
         broker = snapshot.get("broker", {}).get("data", {})
         positions = snapshot.get("position", {}).get("data", {})
@@ -41,9 +41,18 @@ class ConsoleUI:
         )
         exits = positions.get("exit_proposals", {})
         lines.append(
-            "Exit Proposals: Total {total} | Pending {pending}".format(
-                total=exits.get("total", 0), pending=exits.get("pending", 0)
+            "Exit Proposals: Total {total} | Active {active} | Pending {pending} | Approved {approved}".format(
+                total=exits.get("total", 0), active=exits.get("active", 0),
+                pending=exits.get("pending", 0), approved=exits.get("approved", 0),
             )
+        )
+        exit_reviews = positions.get("exit_agent_reviews", {})
+        exit_review_states = exit_reviews.get("by_status", {})
+        exit_review_text = ", ".join(
+            f"{name}={count}" for name, count in sorted(exit_review_states.items())
+        ) or "none"
+        lines.append(
+            f"Exit Agent Reviews: Total {exit_reviews.get('total', 0)} | Status: {exit_review_text}"
         )
         intake = snapshot.get("trade", {}).get("data", {}).get("intake", {})
         lines.append(

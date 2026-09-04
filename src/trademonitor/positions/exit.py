@@ -42,6 +42,12 @@ _PROTECTIVE_RULES = {
     ManagementRuleType.UNDERLYING_INVALIDATION,
 }
 
+_EXIT_CLASS_PRIORITY = {
+    ExitProposalClass.STRATEGIC: 1,
+    ExitProposalClass.DETERMINISTIC: 2,
+    ExitProposalClass.PROTECTIVE: 3,
+}
+
 
 class ExitMonitor:
     """Own exit proposals, duplicate suppression, and holding-intent evolution."""
@@ -136,10 +142,26 @@ class ExitMonitor:
             rule_ids = existing_full.trigger_rule_ids
             if trigger_rule_id and trigger_rule_id not in rule_ids:
                 rule_ids = (*rule_ids, trigger_rule_id)
-            updated = replace(existing_full, reasons=reasons, trigger_rule_ids=rule_ids, updated_at=at)
+            incoming_class = ExitProposalClass(proposal_class)
+            promoted = _EXIT_CLASS_PRIORITY[incoming_class] > _EXIT_CLASS_PRIORITY[existing_full.proposal_class]
+            updated_class = incoming_class if promoted else existing_full.proposal_class
+            updated_status = existing_full.status
+            # Protective/deterministic authority must not remain blocked behind a
+            # lower-authority strategic Agent/User review.
+            if updated_class in {ExitProposalClass.PROTECTIVE, ExitProposalClass.DETERMINISTIC}:
+                updated_status = ExitProposalStatus.APPROVED
+            updated = replace(
+                existing_full,
+                proposal_class=updated_class,
+                status=updated_status,
+                reasons=reasons,
+                trigger_rule_ids=rule_ids,
+                updated_at=at,
+            )
             self._repository.save_exit_proposal(updated.to_record())
+            event_name = "EXIT_PROPOSAL_ESCALATED" if promoted else "EXIT_TRIGGER_COALESCED"
             event = DomainEvent.create(
-                "EXIT_TRIGGER_COALESCED",
+                event_name,
                 source="EXIT",
                 occurred_at=at,
                 payload={
@@ -147,6 +169,8 @@ class ExitMonitor:
                     "proposal_id": updated.proposal_id,
                     "reason": reason,
                     "trigger_rule_id": trigger_rule_id,
+                    "proposal_class": updated.proposal_class.value,
+                    "status": updated.status.value,
                 },
             )
             return updated, [event]
@@ -160,14 +184,20 @@ class ExitMonitor:
                 )
                 self._repository.save_exit_proposal(superseded.to_record())
 
+        normalized_class = ExitProposalClass(proposal_class)
+        initial_status = (
+            ExitProposalStatus.PENDING
+            if normalized_class == ExitProposalClass.STRATEGIC
+            else ExitProposalStatus.APPROVED
+        )
         proposal = ExitProposal(
             proposal_id=str(uuid4()),
             position_id=position_id,
-            proposal_class=ExitProposalClass(proposal_class),
+            proposal_class=normalized_class,
             action=ExitAction(action),
             requested_quantity=requested_quantity,
             requested_percent=pct,
-            status=ExitProposalStatus.PENDING,
+            status=initial_status,
             reasons=(reason,),
             trigger_rule_ids=(() if trigger_rule_id is None else (trigger_rule_id,)),
             created_at=at,
@@ -175,7 +205,7 @@ class ExitMonitor:
             created_by=created_by,
         )
         self._repository.save_exit_proposal(proposal.to_record())
-        return proposal, [
+        events = [
             DomainEvent.create(
                 "EXIT_PROPOSAL_CREATED",
                 source="EXIT",
@@ -189,9 +219,25 @@ class ExitMonitor:
                     "requested_percent": None if proposal.requested_percent is None else str(proposal.requested_percent),
                     "reason": reason,
                     "created_by": created_by,
+                    "status": proposal.status.value,
                 },
             )
         ]
+        if proposal.status == ExitProposalStatus.APPROVED:
+            events.append(
+                DomainEvent.create(
+                    "EXIT_PROPOSAL_AUTO_APPROVED",
+                    source="EXIT",
+                    occurred_at=at,
+                    payload={
+                        "position_id": position_id,
+                        "proposal_id": proposal.proposal_id,
+                        "proposal_class": proposal.proposal_class.value,
+                        "reason": "Authorized deterministic/protective exit does not wait for Agents",
+                    },
+                )
+            )
+        return proposal, events
 
     def day_end_review(
         self, position_id: str, *, at: datetime, cutoff_at: datetime

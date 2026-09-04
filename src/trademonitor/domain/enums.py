@@ -229,9 +229,12 @@ class ExitAction(StrEnum):
 
 
 class ExitProposalStatus(StrEnum):
-    """Lifecycle before TM4 execution deployment exists."""
+    """Exit-decision lifecycle before TM4 execution deployment exists."""
 
     PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    RETREAT_WAIT = "RETREAT_WAIT"
     CANCELLED = "CANCELLED"
     SUPERSEDED = "SUPERSEDED"
     SATISFIED_BY_BROKER = "SATISFIED_BY_BROKER"

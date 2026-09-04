@@ -1,6 +1,6 @@
 # TradeMonitor
 
-**Current milestone:** TM3/TGT3 — Exit Monitor and Position Evolution
+**Current milestone:** TM3/TGT4 — Exit Monitor and Position Evolution
 
 TradeMonitor is being developed as a professional trade-monitoring, risk-governance, position-management, and execution system for Indian markets.
 
@@ -26,7 +26,7 @@ TM1 and TM2 are complete. TM3 now includes deterministic managed-position rules:
 
 **NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM3/TGT2.**
 
-TM3/TGT3 now provides durable PAPER-only exit proposals, partial-exit shapes, duplicate/conflicting exit suppression, DAY end-of-day protection, deliberate position holding-intent conversion, and broker-truth closure convergence. Module M and real execution remain TM4 scope.
+TM3/TGT4 now provides durable PAPER-only exit proposals, partial-exit shapes, duplicate/conflicting exit suppression, DAY end-of-day protection, deliberate position holding-intent conversion, and broker-truth closure convergence. Module M and real execution remain TM4 scope.
 
 ## Development Setup
 
@@ -48,3 +48,7 @@ By default the runtime database is stored at `data/trademonitor.db`. Override it
 ```bash
 TM_DATABASE_PATH=/tmp/trademonitor.db python scripts/run_dev.py
 ```
+
+
+### TM3/TGT4
+Strategic exit proposals can now use the separate external Agents validation gate with `APPROVE / REJECT / RETREAT_WAIT`, User escalation on disagreement, and no broker-write capability. Protective/deterministic exits bypass the Agent gate.

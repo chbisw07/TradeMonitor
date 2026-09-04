@@ -1033,6 +1033,185 @@ class EntryReviewRecord:
 
 
 @dataclass(frozen=True)
+class AgentExitReviewPacket:
+    """Bounded strategic-exit packet sent to the external Agents service."""
+
+    review_id: str
+    exit_proposal_id: str
+    position_id: str
+    requested_at: datetime
+    proposal_class: str
+    action: str
+    requested_quantity: int | None
+    requested_percent: Decimal | None
+    reasons: tuple[str, ...]
+    symbol: str
+    quantity: int
+    average_price: Decimal
+    last_price: Decimal | None
+    unrealized_pnl: Decimal | None
+    trade_type: str | None
+    horizon_at: datetime | None
+    expiry_date: date | None
+
+    @classmethod
+    def from_exit_proposal(
+        cls, *, review_id: str, requested_at: datetime, proposal: "ExitProposal",
+        position: "PositionRecord", profile: "PositionManagementProfile | None"
+    ) -> "AgentExitReviewPacket":
+        return cls(
+            review_id=review_id,
+            exit_proposal_id=proposal.proposal_id,
+            position_id=proposal.position_id,
+            requested_at=requested_at,
+            proposal_class=proposal.proposal_class.value,
+            action=proposal.action.value,
+            requested_quantity=proposal.requested_quantity,
+            requested_percent=proposal.requested_percent,
+            reasons=proposal.reasons,
+            symbol=position.symbol,
+            quantity=position.quantity,
+            average_price=position.average_price,
+            last_price=position.last_price,
+            unrealized_pnl=position.unrealized_pnl,
+            trade_type=None if profile is None else profile.trade_type.value,
+            horizon_at=None if profile is None else profile.horizon_at,
+            expiry_date=None if profile is None else profile.expiry_date,
+        )
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "review_id": self.review_id,
+            "exit_proposal_id": self.exit_proposal_id,
+            "position_id": self.position_id,
+            "requested_at": self.requested_at.isoformat(),
+            "proposal_class": self.proposal_class,
+            "action": self.action,
+            "requested_quantity": self.requested_quantity,
+            "requested_percent": None if self.requested_percent is None else str(self.requested_percent),
+            "reasons": list(self.reasons),
+            "symbol": self.symbol,
+            "quantity": self.quantity,
+            "average_price": str(self.average_price),
+            "last_price": None if self.last_price is None else str(self.last_price),
+            "unrealized_pnl": None if self.unrealized_pnl is None else str(self.unrealized_pnl),
+            "trade_type": self.trade_type,
+            "horizon_at": None if self.horizon_at is None else self.horizon_at.isoformat(),
+            "expiry_date": None if self.expiry_date is None else self.expiry_date.isoformat(),
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "AgentExitReviewPacket":
+        return cls(
+            review_id=str(record["review_id"]),
+            exit_proposal_id=str(record["exit_proposal_id"]),
+            position_id=str(record["position_id"]),
+            requested_at=datetime.fromisoformat(str(record["requested_at"])),
+            proposal_class=str(record["proposal_class"]),
+            action=str(record["action"]),
+            requested_quantity=record.get("requested_quantity"),
+            requested_percent=_decimal(record.get("requested_percent")),
+            reasons=tuple(str(x) for x in record.get("reasons", [])),
+            symbol=str(record["symbol"]),
+            quantity=int(record["quantity"]),
+            average_price=_decimal(record["average_price"]) or Decimal("0"),
+            last_price=_decimal(record.get("last_price")),
+            unrealized_pnl=_decimal(record.get("unrealized_pnl")),
+            trade_type=record.get("trade_type"),
+            horizon_at=None if record.get("horizon_at") is None else datetime.fromisoformat(str(record["horizon_at"])),
+            expiry_date=None if record.get("expiry_date") is None else date.fromisoformat(str(record["expiry_date"])),
+        )
+
+
+@dataclass(frozen=True)
+class AgentExitReviewResult:
+    """Structured independent opinion on one exact exit proposal."""
+
+    review_id: str
+    verdict: "AgentVerdict"
+    reason: str
+    confidence: int | None = None
+    suggestion: str | None = None
+    responded_at: datetime = None  # type: ignore[assignment]
+
+    def __init__(
+        self, *, review_id: str, verdict, reason: str, confidence: int | None = None,
+        suggestion: str | None = None, responded_at: datetime | None = None
+    ) -> None:
+        from trademonitor.domain.enums import AgentVerdict
+        if confidence is not None and not 0 <= int(confidence) <= 100:
+            raise ValueError("confidence must be between 0 and 100")
+        object.__setattr__(self, "review_id", review_id)
+        object.__setattr__(self, "verdict", AgentVerdict(verdict))
+        object.__setattr__(self, "reason", reason.strip())
+        object.__setattr__(self, "confidence", None if confidence is None else int(confidence))
+        object.__setattr__(self, "suggestion", suggestion.strip() if suggestion else None)
+        object.__setattr__(self, "responded_at", responded_at or utc_now())
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "review_id": self.review_id,
+            "verdict": self.verdict.value,
+            "reason": self.reason,
+            "confidence": self.confidence,
+            "suggestion": self.suggestion,
+            "responded_at": self.responded_at.isoformat(),
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "AgentExitReviewResult":
+        return cls(
+            review_id=str(record["review_id"]), verdict=record["verdict"],
+            reason=str(record.get("reason", "")), confidence=record.get("confidence"),
+            suggestion=record.get("suggestion"),
+            responded_at=datetime.fromisoformat(str(record["responded_at"])),
+        )
+
+
+@dataclass(frozen=True)
+class ExitReviewRecord:
+    """Durable audit record for one external strategic-exit review cycle."""
+
+    review_id: str
+    exit_proposal_id: str
+    packet: AgentExitReviewPacket
+    status: "AgentReviewStatus"
+    created_at: datetime
+    updated_at: datetime
+    result: AgentExitReviewResult | None = None
+    user_decision: "AgentVerdict | None" = None
+    user_reason: str | None = None
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "review_id": self.review_id,
+            "exit_proposal_id": self.exit_proposal_id,
+            "packet": self.packet.to_record(),
+            "status": self.status.value,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "result": None if self.result is None else self.result.to_record(),
+            "user_decision": None if self.user_decision is None else self.user_decision.value,
+            "user_reason": self.user_reason,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "ExitReviewRecord":
+        from trademonitor.domain.enums import AgentReviewStatus, AgentVerdict
+        return cls(
+            review_id=str(record["review_id"]),
+            exit_proposal_id=str(record["exit_proposal_id"]),
+            packet=AgentExitReviewPacket.from_record(record["packet"]),
+            status=AgentReviewStatus(record["status"]),
+            created_at=datetime.fromisoformat(str(record["created_at"])),
+            updated_at=datetime.fromisoformat(str(record["updated_at"])),
+            result=None if record.get("result") is None else AgentExitReviewResult.from_record(record["result"]),
+            user_decision=None if record.get("user_decision") is None else AgentVerdict(record["user_decision"]),
+            user_reason=record.get("user_reason"),
+        )
+
+
+@dataclass(frozen=True)
 class RiskProfile:
     """Versioned Risk Management configuration.
 
