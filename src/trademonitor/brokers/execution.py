@@ -16,7 +16,7 @@ from trademonitor.domain.models import BrokerInstrument, BrokerOrderRequest, Bro
 class ExecutionBroker(Broker):
     """Broker adapter capable of controlled order deployment.
 
-    TGT1 ships no real-broker implementation.  The ``is_simulation`` flag lets the
+    TGT2 still ships no real-broker implementation.  The ``is_simulation`` flag lets the
     Core preserve PAPER-only runtime safety while the deployment machinery is
     exercised against deterministic test adapters.
     """

@@ -1,3 +1,16 @@
+## Version 0.4.3 / TM4-TGT2 — Execution Simulation, Replay and Failure Injection
+
+- Added deterministic `SimulatedExecutionBroker` for controlled failure injection.
+- Added accept-then-timeout, disconnect-before-accept, delayed visibility and reconciliation-outage scenarios.
+- Reconciliation failures now become `UNCERTAIN`; no blind retry is introduced.
+- Added stale broker-order observation protection.
+- Added explicit stale/unavailable Market-context block for new exposure handoff/deployment.
+- Added restart/replay validation for partial fills, delayed truth, rejection and acknowledgement loss.
+- Added concurrent duplicate-deploy and concurrent full-exit-trigger validation.
+- Added deterministic end-to-end execution replay convergence tests.
+- Preserved PAPER-only operation and real broker writes disabled.
+- Validation: 148 tests passing.
+
 
 ## 0.4.2 - Google Top Picks EntryIntent PAPER bridge
 - Added source-specific Top Picks -> canonical EntryIntent translation at the adapter boundary.

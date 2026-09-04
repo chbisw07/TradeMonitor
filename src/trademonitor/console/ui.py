@@ -12,7 +12,7 @@ class ConsoleUI:
     """Render concise runtime state without owning business logic."""
 
     def render_status(self, snapshot: Mapping[str, Mapping[str, Any]]) -> str:
-        lines = ["TradeMonitor TM4/TGT1", "=" * 72]
+        lines = ["TradeMonitor TM4/TGT2", "=" * 72]
         health = snapshot.get("health", {}).get("data", {})
         broker = snapshot.get("broker", {}).get("data", {})
         positions = snapshot.get("position", {}).get("data", {})
@@ -112,7 +112,7 @@ class ConsoleUI:
                 f"- {name:<9} v{ctx.get('version', 0):<3} updated={ctx.get('updated_at', 'n/a')}"
             )
         lines.append("")
-        lines.append("NO LIVE TRADING CAPABILITY — REAL BROKER WRITES DISABLED; MODULE M IS SIMULATION-ONLY IN TM4/TGT1")
+        lines.append("NO LIVE TRADING CAPABILITY — REAL BROKER WRITES DISABLED; MODULE M IS SIMULATION-ONLY IN TM4/TGT2")
         return "\n".join(lines)
 
     def render_positions(self, positions: Sequence[PositionRecord]) -> str:

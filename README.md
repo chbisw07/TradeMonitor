@@ -1,6 +1,6 @@
 # TradeMonitor
 
-**Current milestone:** TM4/TGT1 — Module M and Broker Deployment
+**Current milestone:** TM4/TGT2 — Execution Simulation, Replay and Failure Injection
 
 TradeMonitor is being developed as a professional trade-monitoring, risk-governance, position-management, and execution system for Indian markets.
 
@@ -24,7 +24,7 @@ TM1 and TM2 are complete. TM3 now includes deterministic managed-position rules:
 - triggered rules emit auditable `EXIT_REVIEW` signals only; they do not create ExecutionRequests
 - broker truth remains authoritative and `UNMANAGED` positions remain read-only
 
-**NO REAL/LIVE BROKER-WRITE CAPABILITY EXISTS IN TM4/TGT1. Module M is enabled only for simulation adapters in PAPER mode.**
+**NO REAL/LIVE BROKER-WRITE CAPABILITY EXISTS IN TM4/TGT2. Module M remains enabled only for simulation adapters in PAPER mode.**
 
 TM3/TGT4 now provides durable PAPER-only exit proposals, partial-exit shapes, duplicate/conflicting exit suppression, DAY end-of-day protection, deliberate position holding-intent conversion, and broker-truth closure convergence. Module M and real execution remain TM4 scope.
 
@@ -55,6 +55,13 @@ python scripts/run_dev.py
 ```
 
 See `docs/GOOGLE_SHEET_FEEDER.md`. Google-specific field names remain entirely outside TM core.
+
+
+## TM4/TGT2 — Execution Failure / Replay Validation
+
+TM4/TGT2 stress-tests Module M rather than adding live trading. A dedicated simulation broker now reproduces acknowledgement loss after broker acceptance, disconnect-before-accept, delayed order visibility, reconciliation outages, partial fills and rejection. Restart/replay tests prove idempotent convergence to broker truth. Explicitly stale Market context blocks creation/deployment of new exposure. Real broker writes remain disabled.
+
+See `docs/TM4_TGT2_ACCEPTANCE.md`.
 
 ## TM4/TGT1 — Module M
 

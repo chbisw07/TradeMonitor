@@ -1,4 +1,4 @@
-"""TM4/TGT1 Module M — controlled broker deployment and order reconciliation."""
+"""TM4/TGT2 Module M — controlled broker deployment and order reconciliation."""
 
 from __future__ import annotations
 
@@ -121,9 +121,31 @@ class ExecutionEngine:
         if request.status in _TERMINAL:
             return request, []
 
-        snapshot = broker.fetch_order_by_client_id(request.idempotency_key)
-        if snapshot is None and request.broker_order_id:
-            snapshot = broker.fetch_order(request.broker_order_id)
+        try:
+            snapshot = broker.fetch_order_by_client_id(request.idempotency_key)
+            if snapshot is None and request.broker_order_id:
+                snapshot = broker.fetch_order(request.broker_order_id)
+        except Exception as exc:
+            when = at or utc_now()
+            uncertain = replace(
+                request,
+                status=ExecutionRequestStatus.UNCERTAIN,
+                updated_at=when,
+                rejection_reason=f"broker reconciliation unavailable: {type(exc).__name__}",
+            )
+            self._repository.save_execution_request(uncertain.to_record())
+            return uncertain, [
+                DomainEvent.create(
+                    "EXECUTION_RECONCILIATION_UNAVAILABLE",
+                    source="MODULE_M",
+                    occurred_at=when,
+                    payload={
+                        "request_id": request_id,
+                        "idempotency_key": request.idempotency_key,
+                        "error_type": type(exc).__name__,
+                    },
+                )
+            ]
         if snapshot is None:
             when = at or utc_now()
             uncertain = replace(
@@ -145,6 +167,21 @@ class ExecutionEngine:
                 )
             ]
 
+        if request.last_broker_observed_at is not None and snapshot.observed_at < request.last_broker_observed_at:
+            return request, [
+                DomainEvent.create(
+                    "EXECUTION_STALE_BROKER_TRUTH_IGNORED",
+                    source="MODULE_M",
+                    occurred_at=at or utc_now(),
+                    payload={
+                        "request_id": request_id,
+                        "broker_order_id": snapshot.broker_order_id,
+                        "stale_observed_at": snapshot.observed_at.isoformat(),
+                        "current_observed_at": request.last_broker_observed_at.isoformat(),
+                    },
+                )
+            ]
+
         updated = self._apply_broker_truth(request, snapshot)
         self._repository.save_execution_request(updated.to_record())
         return updated, [self._broker_event(updated, snapshot)]
@@ -159,6 +196,21 @@ class ExecutionEngine:
         if request.status in _TERMINAL:
             return request, []
         snapshot = broker.cancel_order(request.broker_order_id)
+        if request.last_broker_observed_at is not None and snapshot.observed_at < request.last_broker_observed_at:
+            return request, [
+                DomainEvent.create(
+                    "EXECUTION_STALE_BROKER_TRUTH_IGNORED",
+                    source="MODULE_M",
+                    occurred_at=at or utc_now(),
+                    payload={
+                        "request_id": request_id,
+                        "broker_order_id": snapshot.broker_order_id,
+                        "stale_observed_at": snapshot.observed_at.isoformat(),
+                        "current_observed_at": request.last_broker_observed_at.isoformat(),
+                    },
+                )
+            ]
+
         updated = self._apply_broker_truth(request, snapshot)
         self._repository.save_execution_request(updated.to_record())
         return updated, [self._broker_event(updated, snapshot)]

@@ -37,3 +37,13 @@ TM3/TGT4 adds the independent external Agents gate for strategic/ambiguous exits
 ## TM4/TGT1 — Module M and Broker Deployment — COMPLETE
 
 Implemented durable Entry/Exit ExecutionRequests, current-RM entry authorization, isolated Module M deployment, instrument resolution, idempotent submission, broker acknowledgement/partial-fill/fill/reject/cancel/uncertain reconciliation, restart-safe execution persistence, and simulation-only execution gating. Real broker writes remain disabled until later TM4 targets.
+
+## TM4/TGT2 — Execution Simulation, Replay and Failure Injection — COMPLETE
+
+- Dedicated deterministic execution simulator.
+- Crash/ack-loss, disconnect, delayed visibility, reconciliation outage, partial fill, rejection and stale-data tests.
+- Concurrent deployment/exit-trigger validation.
+- End-to-end deterministic replay convergence.
+- Real broker writes remain disabled.
+
+**Next:** TM4/TGT3 — SEMI_AUTO Controlled Forward Test.

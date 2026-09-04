@@ -137,3 +137,13 @@
 - Broker order truth controls acknowledgement, partial-fill, fill, rejection, and cancellation state.
 - The read-only `Broker` contract remains distinct from the opt-in write-capable `ExecutionBroker` contract.
 - TM4/TGT1 permits simulation execution adapters only; real broker writes remain disabled.
+
+## TM4/TGT2 Failure / Replay Invariants
+
+- Broker acceptance with lost acknowledgement becomes `UNCERTAIN`; TM reconciles by idempotency/client-order identity and never blind-resubmits.
+- Reconciliation transport failure is contained as `UNCERTAIN` and does not erase durable execution intent.
+- Explicitly stale/unavailable Market context blocks creation/deployment of new exposure.
+- Broker-order observations older than the last accepted broker observation cannot roll execution state backward.
+- Concurrent repeated deployment of one ExecutionRequest must result in at most one broker submission.
+- Concurrent full-exit triggers must converge on one active full-exit path before Module M.
+- Real broker writes remain disabled throughout TM4/TGT2.

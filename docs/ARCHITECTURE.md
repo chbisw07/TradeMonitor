@@ -143,3 +143,9 @@ Approved Exit Proposal ───────────┘                     
 `ExecutionRequest` is the narrow boundary between business decisions and broker mechanics. It carries broker/instrument/side/quantity/order facts and provenance of the upstream authority. For ENTRY, the request is impossible to construct from a stale/non-current RM decision.
 
 The read-only `Broker` interface and write-capable `ExecutionBroker` interface remain separate. TGT1 only permits simulation execution adapters, preserving PAPER-only production safety while the execution machinery is validated.
+
+## TM4/TGT2 — Execution Failure/Replay Boundary
+
+The execution architecture remains unchanged: authorized `ExecutionRequest` → Module M → `ExecutionBroker` → broker truth. TGT2 adds a deterministic simulation adapter that can inject ambiguity and delayed truth without changing core execution ownership. Module M contains transient reconciliation failures as `UNCERTAIN`, ignores stale broker-order observations, and never interprets missing acknowledgement as permission to submit again.
+
+TGT2 also makes Market freshness an explicit precondition for price-dependent new exposure: a Market context explicitly marked `STALE` or `UNAVAILABLE` blocks entry handoff/deployment until revalidation.

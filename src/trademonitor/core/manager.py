@@ -430,6 +430,7 @@ class CoreTMManager:
         with self._lock:
             self._ensure_started()
             broker_ctx = dict(self._contexts.get("broker").data)
+            self._assert_market_allows_new_risk()
             if broker_ctx.get("runtime_reconciled") is not True or broker_ctx.get("status") != "RECONCILED":
                 raise ExecutionAuthorizationError("Current broker truth is required before entry execution handoff")
             if broker_ctx.get("broker") != broker:
@@ -488,11 +489,11 @@ class CoreTMManager:
             return request
 
     def deploy_execution_request(self, request_id: str, broker: ExecutionBroker) -> ExecutionRequest:
-        """Deploy through Module M. TM4/TGT1 permits simulation adapters only."""
+        """Deploy through Module M. TM4/TGT2 permits simulation adapters only."""
         with self._lock:
             self._ensure_started()
             if not broker.is_simulation:
-                raise PermissionError("TM4/TGT1 is PAPER-only; real broker writes are disabled")
+                raise PermissionError("TM4/TGT2 is PAPER-only; real broker writes are disabled")
             pending = self._repository.get_execution_request(request_id)
             if pending is None:
                 raise KeyError(f"Unknown execution request: {request_id}")
@@ -511,7 +512,7 @@ class CoreTMManager:
         with self._lock:
             self._ensure_started()
             if not broker.is_simulation:
-                raise PermissionError("TM4/TGT1 is PAPER-only; real broker writes are disabled")
+                raise PermissionError("TM4/TGT2 is PAPER-only; real broker writes are disabled")
             request, events = self._execution.reconcile(request_id, broker)
             for event in events:
                 self._record_event(event)
@@ -522,7 +523,7 @@ class CoreTMManager:
         with self._lock:
             self._ensure_started()
             if not broker.is_simulation:
-                raise PermissionError("TM4/TGT1 is PAPER-only; real broker writes are disabled")
+                raise PermissionError("TM4/TGT2 is PAPER-only; real broker writes are disabled")
             request, events = self._execution.cancel(request_id, broker)
             for event in events:
                 self._record_event(event)
@@ -1144,7 +1145,16 @@ class CoreTMManager:
             self._ensure_started()
             return runtime_fingerprint(self.status_snapshot(), self.positions_snapshot())
 
+    def _assert_market_allows_new_risk(self) -> None:
+        market_ctx = dict(self._contexts.get("market").data)
+        status = str(market_ctx.get("status") or "").upper()
+        if status in {"STALE", "UNAVAILABLE"}:
+            raise ExecutionAuthorizationError(
+                f"Market context is {status}; price-dependent new exposure requires revalidation"
+            )
+
     def _assert_entry_execution_authorization_current(self, request: ExecutionRequest) -> None:
+        self._assert_market_allows_new_risk()
         if not request.risk_decision_id:
             raise ExecutionAuthorizationError("ENTRY request has no Risk authorization")
         decision = self._repository.get_risk_decision(request.risk_decision_id)

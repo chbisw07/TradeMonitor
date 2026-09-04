@@ -16,10 +16,10 @@ def build_manager(settings: Settings | None = None) -> CoreTMManager:
 
 
 def main() -> None:
-    """Start the PAPER-only TM4/TGT1 control-room runtime.
+    """Start the PAPER-only TM4/TGT2 control-room runtime.
 
     No broker adapter is auto-connected. Real broker credentials/connectivity and
-    all broker writes remain outside TM4/TGT1.
+    all broker writes remain outside TM4/TGT2.
     """
     manager = build_manager()
     manager.start()
