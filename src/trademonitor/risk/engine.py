@@ -107,6 +107,7 @@ class RiskEngine:
                 "profile": profile.to_record(),
                 "broker": broker_context.get("broker"),
                 "broker_observed_at": broker_context.get("observed_at"),
+                "broker_state_token": broker_context.get("risk_state_token"),
             },
             proposal=proposal,
         )

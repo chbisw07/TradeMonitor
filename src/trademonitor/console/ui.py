@@ -12,7 +12,7 @@ class ConsoleUI:
     """Render concise runtime state without owning business logic."""
 
     def render_status(self, snapshot: Mapping[str, Mapping[str, Any]]) -> str:
-        lines = ["TradeMonitor TM4/TGT2", "=" * 72]
+        lines = ["TradeMonitor TM4/TGT3", "=" * 72]
         health = snapshot.get("health", {}).get("data", {})
         broker = snapshot.get("broker", {}).get("data", {})
         positions = snapshot.get("position", {}).get("data", {})
@@ -85,8 +85,15 @@ class ConsoleUI:
         execution = snapshot.get("execution", {}).get("data", {})
         exec_states = execution.get("by_status", {})
         exec_text = ", ".join(f"{name}={count}" for name, count in sorted(exec_states.items())) or "none"
+        approvals = execution.get("approvals", {})
+        approval_states = approvals.get("by_status", {})
+        approval_text = ", ".join(f"{name}={count}" for name, count in sorted(approval_states.items())) or "none"
+        real_writes = "ARMED/SEMI_AUTO" if execution.get("real_broker_writes_enabled") else "DISABLED"
         lines.append(
-            f"Execution: Requests {execution.get('total_requests', 0)} | Status: {exec_text} | Real broker writes: DISABLED"
+            f"Execution: Requests {execution.get('total_requests', 0)} | Status: {exec_text} | Real broker writes: {real_writes}"
+        )
+        lines.append(
+            f"SEMI_AUTO Approvals: Total {approvals.get('total', 0)} | Status: {approval_text} | TTL {execution.get('semi_auto_approval_ttl_seconds', '-')}s"
         )
         lines.append("")
         lines.append("Domain Health")
@@ -112,7 +119,10 @@ class ConsoleUI:
                 f"- {name:<9} v{ctx.get('version', 0):<3} updated={ctx.get('updated_at', 'n/a')}"
             )
         lines.append("")
-        lines.append("NO LIVE TRADING CAPABILITY — REAL BROKER WRITES DISABLED; MODULE M IS SIMULATION-ONLY IN TM4/TGT2")
+        if health.get("live_execution_enabled"):
+            lines.append("SEMI_AUTO REAL BROKER WRITES ARMED — EACH REQUEST STILL REQUIRES CURRENT RM PERMISSION + EXPLICIT USER APPROVAL")
+        else:
+            lines.append("NO LIVE TRADING CAPABILITY — REAL BROKER WRITES ARE DISABLED")
         return "\n".join(lines)
 
     def render_positions(self, positions: Sequence[PositionRecord]) -> str:

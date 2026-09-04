@@ -1,6 +1,6 @@
 # TradeMonitor
 
-**Current milestone:** TM4/TGT2 — Execution Simulation, Replay and Failure Injection
+**Current milestone:** TM4/TGT3 — SEMI_AUTO Controlled Forward Test (code-ready; live acceptance pending)
 
 TradeMonitor is being developed as a professional trade-monitoring, risk-governance, position-management, and execution system for Indian markets.
 
@@ -24,7 +24,7 @@ TM1 and TM2 are complete. TM3 now includes deterministic managed-position rules:
 - triggered rules emit auditable `EXIT_REVIEW` signals only; they do not create ExecutionRequests
 - broker truth remains authoritative and `UNMANAGED` positions remain read-only
 
-**NO REAL/LIVE BROKER-WRITE CAPABILITY EXISTS IN TM4/TGT2. Module M remains enabled only for simulation adapters in PAPER mode.**
+**PAPER remains the default. TM4/TGT3 contains a deliberately gated SEMI_AUTO real-broker path; it is disabled unless explicitly armed and still requires per-request User approval plus current RM permission. AUTO remains unavailable.**
 
 TM3/TGT4 now provides durable PAPER-only exit proposals, partial-exit shapes, duplicate/conflicting exit suppression, DAY end-of-day protection, deliberate position holding-intent conversion, and broker-truth closure convergence. Module M and real execution remain TM4 scope.
 
@@ -124,3 +124,14 @@ python scripts/feed_google_top_picks.py --limit 5 --create-entry-intents
 ```
 
 This is still PAPER-only. It creates/recovers EntryIntents but does not provide a market-data loop or live broker writes.
+
+## TM4/TGT3 — SEMI_AUTO Controlled Forward Test
+
+- explicit durable per-request User approval
+- approval TTL and exact APPROVE/REJECT confirmation
+- real writes require SEMI_AUTO + explicit global arming
+- optional Zerodha Kite Connect reference adapter
+- current Risk/broker truth is rechecked immediately before Module M
+- AUTO remains unavailable
+
+See `docs/TM4_TGT3_ACCEPTANCE.md` and `docs/ZERODHA_SEMI_AUTO.md`. The milestone is not operationally accepted until a deliberately tiny real-broker test has been completed and reviewed.

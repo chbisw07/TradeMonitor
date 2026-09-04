@@ -22,6 +22,7 @@ from trademonitor.domain.models import (
     ExitProposal,
     ExitReviewRecord,
     ExecutionRequest,
+    ExecutionApproval,
 )
 from trademonitor.persistence.database import Database
 
@@ -184,6 +185,15 @@ class RuntimeRepository(ABC):
 
     @abstractmethod
     def list_execution_requests(self, *, status: str | None = None) -> list[ExecutionRequest]: ...
+
+    @abstractmethod
+    def save_execution_approval(self, record: Mapping[str, Any]) -> None: ...
+
+    @abstractmethod
+    def get_latest_execution_approval(self, request_id: str) -> ExecutionApproval | None: ...
+
+    @abstractmethod
+    def list_execution_approvals(self, *, request_id: str | None = None) -> list[ExecutionApproval]: ...
 
 
 # Backward-compatible name retained from TM0 skeleton.
@@ -901,4 +911,35 @@ class SQLiteRuntimeRepository(RuntimeRepository):
         with self._database.connect() as connection:
             rows = connection.execute(sql, params).fetchall()
         return [ExecutionRequest.from_record(json.loads(row["record_json"])) for row in rows]
+
+    def save_execution_approval(self, record: Mapping[str, Any]) -> None:
+        with self._database.connect() as connection:
+            connection.execute(
+                """INSERT INTO execution_approvals(approval_id, request_id, record_json, status, updated_at)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(approval_id) DO UPDATE SET
+                     record_json=excluded.record_json, status=excluded.status, updated_at=excluded.updated_at""",
+                (str(record["approval_id"]), str(record["request_id"]),
+                 json.dumps(dict(record), sort_keys=True, default=str),
+                 str(record["status"]), str(record["updated_at"])),
+            )
+
+    def get_latest_execution_approval(self, request_id: str) -> ExecutionApproval | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                """SELECT record_json FROM execution_approvals WHERE request_id = ?
+                   ORDER BY updated_at DESC, approval_id DESC LIMIT 1""", (request_id,)
+            ).fetchone()
+        return None if row is None else ExecutionApproval.from_record(json.loads(row["record_json"]))
+
+    def list_execution_approvals(self, *, request_id: str | None = None) -> list[ExecutionApproval]:
+        sql = "SELECT record_json FROM execution_approvals"
+        params: tuple[str, ...] = ()
+        if request_id is not None:
+            sql += " WHERE request_id = ?"
+            params = (request_id,)
+        sql += " ORDER BY updated_at, approval_id"
+        with self._database.connect() as connection:
+            rows = connection.execute(sql, params).fetchall()
+        return [ExecutionApproval.from_record(json.loads(row["record_json"])) for row in rows]
 

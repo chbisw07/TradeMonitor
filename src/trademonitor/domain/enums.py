@@ -274,6 +274,13 @@ class BrokerOrderStatus(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class ExecutionApprovalStatus(StrEnum):
+    """Operator decision lifecycle for SEMI_AUTO execution."""
+
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
 class ExecutionRequestStatus(StrEnum):
     """Durable Module M lifecycle for one authorized execution intent."""
 

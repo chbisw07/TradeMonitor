@@ -46,4 +46,12 @@ Implemented durable Entry/Exit ExecutionRequests, current-RM entry authorization
 - End-to-end deterministic replay convergence.
 - Real broker writes remain disabled.
 
-**Next:** TM4/TGT3 — SEMI_AUTO Controlled Forward Test.
+## TM4/TGT3 — SEMI_AUTO Controlled Forward Test — CODE READY / LIVE ACCEPTANCE PENDING
+
+- Added explicit per-request User approval gate for real broker deployment.
+- PAPER remains default; SEMI_AUTO must be deliberately armed; AUTO remains unavailable.
+- Added optional Zerodha reference adapter and controlled operator CLI.
+- Fresh unchanged broker reads no longer invalidate RM solely due to a new observation timestamp; a stable risk-state token binds material account facts.
+- Operational completion requires a tiny reviewed real-broker forward test.
+
+**Next after live acceptance:** TM4/TGT4 — AUTO Readiness.

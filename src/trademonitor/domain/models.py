@@ -1777,3 +1777,52 @@ class ExecutionRequest:
             last_broker_observed_at=(None if record.get("last_broker_observed_at") is None else datetime.fromisoformat(str(record["last_broker_observed_at"]))),
             instrument_token=record.get("instrument_token"),
         )
+
+
+@dataclass(frozen=True)
+class ExecutionApproval:
+    """Durable explicit User approval bound to one ExecutionRequest in SEMI_AUTO."""
+
+    approval_id: str
+    request_id: str
+    idempotency_key: str
+    status: "ExecutionApprovalStatus"
+    requested_at: datetime
+    updated_at: datetime
+    requested_by: str
+    reason: str
+    decided_at: datetime | None = None
+    decided_by: str | None = None
+    decision_reason: str | None = None
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "approval_id": self.approval_id,
+            "request_id": self.request_id,
+            "idempotency_key": self.idempotency_key,
+            "status": self.status.value,
+            "requested_at": self.requested_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "requested_by": self.requested_by,
+            "reason": self.reason,
+            "decided_at": None if self.decided_at is None else self.decided_at.isoformat(),
+            "decided_by": self.decided_by,
+            "decision_reason": self.decision_reason,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "ExecutionApproval":
+        from trademonitor.domain.enums import ExecutionApprovalStatus
+        return cls(
+            approval_id=str(record["approval_id"]),
+            request_id=str(record["request_id"]),
+            idempotency_key=str(record["idempotency_key"]),
+            status=ExecutionApprovalStatus(str(record["status"])),
+            requested_at=datetime.fromisoformat(str(record["requested_at"])),
+            updated_at=datetime.fromisoformat(str(record["updated_at"])),
+            requested_by=str(record["requested_by"]),
+            reason=str(record["reason"]),
+            decided_at=(None if record.get("decided_at") is None else datetime.fromisoformat(str(record["decided_at"]))),
+            decided_by=record.get("decided_by"),
+            decision_reason=record.get("decision_reason"),
+        )

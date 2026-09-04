@@ -76,9 +76,14 @@ def test_profile_change_invalidates_old_risk_permission(tmp_path):
 def test_broker_truth_change_after_risk_pass_requires_re_risk(tmp_path):
     tm, intent, decision, t = _risk_approved(tmp_path)
     from trademonitor.brokers.mock import MockBroker
-    from trademonitor.domain.models import BrokerAccountSnapshot
+    from trademonitor.domain.models import BrokerAccountSnapshot, BrokerPositionSnapshot
     tm.reconcile_broker_truth(MockBroker(BrokerAccountSnapshot.create(
-        broker="MOCK", observed_at=t + timedelta(minutes=18)
+        broker="MOCK", observed_at=t + timedelta(minutes=18),
+        positions=[BrokerPositionSnapshot(
+            broker="MOCK", broker_position_key="NFO:OTHER", exchange="NFO",
+            symbol="OTHER26SEP100CE", product="NRML", quantity=50,
+            average_price="10", observed_at=t + timedelta(minutes=18),
+        )],
     )))
     with pytest.raises(ExecutionAuthorizationError):
         _prepare(tm, intent, decision, t)

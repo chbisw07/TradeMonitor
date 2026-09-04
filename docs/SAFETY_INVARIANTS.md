@@ -147,3 +147,13 @@
 - Concurrent repeated deployment of one ExecutionRequest must result in at most one broker submission.
 - Concurrent full-exit triggers must converge on one active full-exit path before Module M.
 - Real broker writes remain disabled throughout TM4/TGT2.
+
+## TM4/TGT3 SEMI_AUTO Invariants
+
+- PAPER remains the default execution mode.
+- Real broker writes require SEMI_AUTO mode and an explicit global arming flag; AUTO is unavailable.
+- Every real ExecutionRequest requires an explicit current User approval bound to that request's idempotency key.
+- User approval expires; expiry requires a fresh decision.
+- User approval never overrides Risk Management.
+- Re-reading unchanged broker account facts may refresh broker truth without invalidating Risk merely because the local observation timestamp changed. Material broker Risk state changes invalidate prior Risk permission.
+- Real-broker adapters are optional plugins behind the same ExecutionBroker contract; no broker-specific schema may leak into core domains.

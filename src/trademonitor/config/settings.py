@@ -6,13 +6,31 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from trademonitor.domain.enums import ExecutionMode
+
 
 @dataclass(frozen=True)
 class Settings:
-    """Small TM1 settings object. Later milestones can extend validation/config sources."""
+    """Runtime settings. Defaults remain deliberately safe/PAPER-only."""
 
     database_path: Path = Path("data/trademonitor.db")
+    execution_mode: ExecutionMode = ExecutionMode.PAPER
+    allow_real_broker_writes: bool = False
+    semi_auto_approval_ttl_seconds: int = 60
 
     @classmethod
     def from_env(cls) -> "Settings":
-        return cls(database_path=Path(os.getenv("TM_DATABASE_PATH", "data/trademonitor.db")))
+        raw_mode = os.getenv("TM_EXECUTION_MODE", "PAPER").strip().upper()
+        mode = ExecutionMode(raw_mode)
+        if mode == ExecutionMode.AUTO:
+            raise ValueError("TM4/TGT3 does not permit AUTO mode")
+        allow = os.getenv("TM_ALLOW_REAL_BROKER_WRITES", "false").strip().lower() in {"1", "true", "yes", "on"}
+        ttl = int(os.getenv("TM_SEMI_AUTO_APPROVAL_TTL_SECONDS", "60"))
+        if ttl <= 0:
+            raise ValueError("TM_SEMI_AUTO_APPROVAL_TTL_SECONDS must be positive")
+        return cls(
+            database_path=Path(os.getenv("TM_DATABASE_PATH", "data/trademonitor.db")),
+            execution_mode=mode,
+            allow_real_broker_writes=allow,
+            semi_auto_approval_ttl_seconds=ttl,
+        )

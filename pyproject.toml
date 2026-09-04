@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trademonitor"
-version = "0.4.3"
+version = "0.5.0"
 description = "TradeMonitor core runtime foundation for Indian markets."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -17,6 +17,9 @@ dev = [
 google = [
     "gspread>=6.1,<7",
     "google-auth>=2.35,<3",
+]
+zerodha = [
+    "kiteconnect>=5.2.1,<6",
 ]
 
 [project.scripts]

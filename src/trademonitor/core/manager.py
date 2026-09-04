@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+import hashlib
+import json
 from datetime import datetime
 from threading import RLock
 from typing import Any
@@ -16,7 +18,7 @@ from trademonitor.core.context import RuntimeContexts
 from trademonitor.core.event_bus import EventBus
 from trademonitor.core.health import DomainHealthReport, FaultReport
 from trademonitor.core.recovery import FreshnessRelation, compare_observation_time, runtime_fingerprint
-from trademonitor.domain.enums import AgentVerdict, AttentionLevel, AttentionStatus, EntryIntentState, HealthStatus, RiskDecision, ExitAction, ExitProposalClass, OrderSide, OrderType, ExecutionRequestStatus, ExecutionPurpose
+from trademonitor.domain.enums import AgentVerdict, AttentionLevel, AttentionStatus, EntryIntentState, HealthStatus, RiskDecision, ExitAction, ExitProposalClass, OrderSide, OrderType, ExecutionRequestStatus, ExecutionPurpose, ExecutionMode, ExecutionApprovalStatus
 from trademonitor.domain.events import DomainEvent
 from trademonitor.domain.models import (
     AttentionItem,
@@ -41,6 +43,7 @@ from trademonitor.domain.models import (
     ExitReviewRecord,
     PositionConversionRequest,
     ExecutionRequest,
+    ExecutionApproval,
 )
 from trademonitor.entry.monitor import EntryMonitor
 from trademonitor.entry.review import EntryReviewCoordinator
@@ -52,6 +55,7 @@ from trademonitor.positions.review import ExitReviewCoordinator
 from trademonitor.risk.engine import RiskEngine
 from trademonitor.execution.requests import ExecutionRequestBuilder, ExecutionAuthorizationError
 from trademonitor.execution.engine import ExecutionEngine
+from trademonitor.execution.approval import SemiAutoApprovalCoordinator, SemiAutoApprovalError
 
 
 class CoreTMManager:
@@ -62,9 +66,22 @@ class CoreTMManager:
     into one coherent operating picture.
     """
 
-    def __init__(self, repository: RuntimeRepository, event_bus: EventBus | None = None) -> None:
+    def __init__(
+        self,
+        repository: RuntimeRepository,
+        event_bus: EventBus | None = None,
+        *,
+        execution_mode: ExecutionMode = ExecutionMode.PAPER,
+        allow_real_broker_writes: bool = False,
+        semi_auto_approval_ttl_seconds: int = 60,
+    ) -> None:
         self._repository = repository
         self._event_bus = event_bus or EventBus()
+        self._execution_mode = ExecutionMode(execution_mode)
+        if self._execution_mode == ExecutionMode.AUTO:
+            raise ValueError("TM4/TGT3 does not permit AUTO mode")
+        self._allow_real_broker_writes = bool(allow_real_broker_writes)
+        self._semi_auto_approval_ttl_seconds = int(semi_auto_approval_ttl_seconds)
         self._contexts = RuntimeContexts.empty()
         self._positions = PositionManager(repository)
         self._management_rules = ManagementRuleEngine(repository, self._positions)
@@ -78,6 +95,9 @@ class CoreTMManager:
         self._risk = RiskEngine(repository)
         self._execution_requests = ExecutionRequestBuilder(repository)
         self._execution = ExecutionEngine(repository)
+        self._execution_approval = SemiAutoApprovalCoordinator(
+            repository, ttl_seconds=self._semi_auto_approval_ttl_seconds
+        )
         self._lock = RLock()
         self._started = False
 
@@ -109,8 +129,10 @@ class CoreTMManager:
                 {
                     "core": "HEALTHY",  # retained for TGT1/TGT2 compatibility
                     "runtime": "STARTED",
-                    "execution_mode": "PAPER",
-                    "live_execution_enabled": False,
+                    "execution_mode": self._execution_mode.value,
+                    "live_execution_enabled": (
+                        self._execution_mode == ExecutionMode.SEMI_AUTO and self._allow_real_broker_writes
+                    ),
                     "domains": domains,
                 }
             )
@@ -140,7 +162,7 @@ class CoreTMManager:
                     payload={
                         "restored_context_count": len(records),
                         "restored_position_count": len(self._repository.list_positions()),
-                        "execution_mode": "PAPER",
+                        "execution_mode": self._execution_mode.value,
                     },
                 )
             )
@@ -438,7 +460,11 @@ class CoreTMManager:
             decision = self._repository.get_risk_decision(risk_decision_id)
             if decision is None:
                 raise KeyError(f"Unknown Risk decision: {risk_decision_id}")
-            if decision.metrics.get("broker_observed_at") != broker_ctx.get("observed_at"):
+            decision_token = decision.metrics.get("broker_state_token")
+            if decision_token:
+                if decision_token != broker_ctx.get("risk_state_token"):
+                    raise ExecutionAuthorizationError("Broker risk state changed after Risk PASS; re-evaluate Risk")
+            elif decision.metrics.get("broker_observed_at") != broker_ctx.get("observed_at"):
                 raise ExecutionAuthorizationError("Broker truth changed after Risk PASS; re-evaluate Risk")
             request = self._execution_requests.from_entry(
                 entry_intent_id=entry_intent_id,
@@ -488,15 +514,65 @@ class CoreTMManager:
             self._refresh_execution_context()
             return request
 
-    def deploy_execution_request(self, request_id: str, broker: ExecutionBroker) -> ExecutionRequest:
-        """Deploy through Module M. TM4/TGT2 permits simulation adapters only."""
+    def request_semi_auto_execution_approval(
+        self, request_id: str, *, requested_by: str = "SYSTEM", reason: str = "Ready for SEMI_AUTO deployment", at: datetime | None = None
+    ) -> ExecutionApproval:
+        """Open a durable operator decision for one READY execution request."""
         with self._lock:
             self._ensure_started()
-            if not broker.is_simulation:
-                raise PermissionError("TM4/TGT2 is PAPER-only; real broker writes are disabled")
+            if self._execution_mode != ExecutionMode.SEMI_AUTO:
+                raise PermissionError("SEMI_AUTO approval is available only in SEMI_AUTO mode")
+            approval, events = self._execution_approval.request(
+                request_id, requested_by=requested_by, reason=reason, at=at
+            )
+            for event in events:
+                self._record_event(event)
+            if events:
+                self.add_attention(
+                    level=AttentionLevel.ATTENTION, source="EXECUTION",
+                    title=f"SEMI_AUTO approval required: {request_id}",
+                    detail="Explicit User APPROVE/REJECT decision is required before real broker deployment.",
+                )
+            self._refresh_execution_context()
+            return approval
+
+    def resolve_semi_auto_execution_approval(
+        self, request_id: str, *, approve: bool, decided_by: str, reason: str, confirmation: str, at: datetime | None = None
+    ) -> ExecutionApproval:
+        with self._lock:
+            self._ensure_started()
+            if self._execution_mode != ExecutionMode.SEMI_AUTO:
+                raise PermissionError("SEMI_AUTO approval is available only in SEMI_AUTO mode")
+            approval, events = self._execution_approval.decide(
+                request_id, approve=approve, decided_by=decided_by, reason=reason,
+                confirmation=confirmation, at=at
+            )
+            for event in events:
+                self._record_event(event)
+            self._resolve_matching_attention(
+                source="EXECUTION", title=f"SEMI_AUTO approval required: {request_id}"
+            )
+            self._refresh_execution_context()
+            return approval
+
+    def execution_approval_snapshot(self, *, request_id: str | None = None) -> list[ExecutionApproval]:
+        with self._lock:
+            self._ensure_started()
+            return self._execution_approval.list(request_id=request_id)
+
+    def deploy_execution_request(self, request_id: str, broker: ExecutionBroker) -> ExecutionRequest:
+        """Deploy through Module M; live writes are SEMI_AUTO + explicit-approval only."""
+        with self._lock:
+            self._ensure_started()
             pending = self._repository.get_execution_request(request_id)
             if pending is None:
                 raise KeyError(f"Unknown execution request: {request_id}")
+            if broker.is_simulation:
+                if self._execution_mode not in {ExecutionMode.PAPER, ExecutionMode.SEMI_AUTO}:
+                    raise PermissionError("Simulation deployment is unavailable in this execution mode")
+            else:
+                self._assert_real_broker_write_enabled()
+                self._execution_approval.assert_current_approval(pending)
             if pending.status == ExecutionRequestStatus.READY:
                 if pending.purpose == ExecutionPurpose.ENTRY:
                     self._assert_entry_execution_authorization_current(pending)
@@ -512,7 +588,7 @@ class CoreTMManager:
         with self._lock:
             self._ensure_started()
             if not broker.is_simulation:
-                raise PermissionError("TM4/TGT2 is PAPER-only; real broker writes are disabled")
+                self._assert_real_broker_write_enabled()
             request, events = self._execution.reconcile(request_id, broker)
             for event in events:
                 self._record_event(event)
@@ -523,7 +599,7 @@ class CoreTMManager:
         with self._lock:
             self._ensure_started()
             if not broker.is_simulation:
-                raise PermissionError("TM4/TGT2 is PAPER-only; real broker writes are disabled")
+                self._assert_real_broker_write_enabled()
             request, events = self._execution.cancel(request_id, broker)
             for event in events:
                 self._record_event(event)
@@ -766,6 +842,7 @@ class CoreTMManager:
                     "status": "RECONCILED",
                     "broker": snapshot.broker,
                     "observed_at": snapshot.observed_at.isoformat(),
+                    "risk_state_token": self._broker_risk_state_token(snapshot),
                     "position_count": len([p for p in positions if p.is_open]),
                     "order_count": snapshot.order_count,
                     "fill_count": snapshot.fill_count,
@@ -791,7 +868,7 @@ class CoreTMManager:
                         "BROKER",
                         HealthStatus.HEALTHY,
                         "Broker truth reconciled successfully",
-                        capabilities={"broker_reads": "AVAILABLE", "broker_writes": "DISABLED"},
+                        capabilities={"broker_reads": "AVAILABLE", "broker_writes": ("SEMI_AUTO_GATED" if self._execution_mode == ExecutionMode.SEMI_AUTO and self._allow_real_broker_writes else "DISABLED")},
                     )
                 )
                 self.report_domain_health(
@@ -1145,6 +1222,12 @@ class CoreTMManager:
             self._ensure_started()
             return runtime_fingerprint(self.status_snapshot(), self.positions_snapshot())
 
+    def _assert_real_broker_write_enabled(self) -> None:
+        if self._execution_mode != ExecutionMode.SEMI_AUTO:
+            raise PermissionError("Real broker writes require SEMI_AUTO mode in TM4/TGT3")
+        if not self._allow_real_broker_writes:
+            raise PermissionError("Real broker writes are not armed; set TM_ALLOW_REAL_BROKER_WRITES=true deliberately")
+
     def _assert_market_allows_new_risk(self) -> None:
         market_ctx = dict(self._contexts.get("market").data)
         status = str(market_ctx.get("status") or "").upper()
@@ -1167,7 +1250,13 @@ class CoreTMManager:
             raise ExecutionAuthorizationError("ENTRY Risk profile changed after authorization")
         if broker_ctx.get("runtime_reconciled") is not True or broker_ctx.get("status") != "RECONCILED":
             raise ExecutionAuthorizationError("Current broker truth is required immediately before Module M")
-        if broker_ctx.get("broker") != request.broker or broker_ctx.get("observed_at") != decision.metrics.get("broker_observed_at"):
+        if broker_ctx.get("broker") != request.broker:
+            raise ExecutionAuthorizationError("Execution broker differs from Risk-authorized broker")
+        decision_token = decision.metrics.get("broker_state_token")
+        if decision_token:
+            if broker_ctx.get("risk_state_token") != decision_token:
+                raise ExecutionAuthorizationError("Broker risk state changed after Risk PASS; entry requires fresh Risk evaluation")
+        elif broker_ctx.get("observed_at") != decision.metrics.get("broker_observed_at"):
             raise ExecutionAuthorizationError("Broker truth changed after Risk PASS; entry requires fresh Risk evaluation")
 
     def _assert_exit_execution_authorization_current(self, request: ExecutionRequest) -> None:
@@ -1185,6 +1274,31 @@ class CoreTMManager:
             raise ExecutionAuthorizationError("Broker position quantity changed after EXIT_ALL request; rebuild from current truth")
         if request.quantity > current_qty:
             raise ExecutionAuthorizationError("Exit request exceeds current broker-confirmed quantity")
+
+    @staticmethod
+    def _broker_risk_state_token(snapshot) -> str:
+        """Stable token for broker facts that materially affect Risk authorization.
+
+        Observation time and live mark-to-market prices are deliberately excluded;
+        an unchanged account can be freshly reconciled without invalidating a Risk PASS.
+        """
+        positions = sorted(
+            (p.broker_position_key, p.exchange, p.symbol, p.product, p.quantity, str(p.average_price))
+            for p in snapshot.positions
+        )
+        funds = None if snapshot.funds is None else (
+            None if snapshot.funds.available_cash is None else str(snapshot.funds.available_cash),
+            None if snapshot.funds.used_margin is None else str(snapshot.funds.used_margin),
+            None if snapshot.funds.net_value is None else str(snapshot.funds.net_value),
+        )
+        payload = {
+            "broker": snapshot.broker,
+            "positions": positions,
+            "funds": funds,
+            "order_count": snapshot.order_count,
+            "fill_count": snapshot.fill_count,
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
     def _last_broker_observed_at(self, broker_name: str) -> datetime | None:
         broker_ctx = self._contexts.get("broker").data
@@ -1262,11 +1376,19 @@ class CoreTMManager:
         for request in requests:
             by_status[request.status.value] = by_status.get(request.status.value, 0) + 1
         context = self._contexts.get("execution")
+        approvals = self._execution_approval.list()
+        approval_counts: dict[str, int] = {}
+        for approval in approvals:
+            approval_counts[approval.status.value] = approval_counts.get(approval.status.value, 0) + 1
         context.patch({
-            "mode": "PAPER",
-            "real_broker_writes_enabled": False,
+            "mode": self._execution_mode.value,
+            "real_broker_writes_enabled": (
+                self._execution_mode == ExecutionMode.SEMI_AUTO and self._allow_real_broker_writes
+            ),
+            "semi_auto_approval_ttl_seconds": self._semi_auto_approval_ttl_seconds,
             "total_requests": len(requests),
             "by_status": by_status,
+            "approvals": {"total": len(approvals), "by_status": approval_counts},
         })
         self._repository.save_context(context.to_record())
 

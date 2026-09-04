@@ -1,3 +1,15 @@
+## Version 0.5.0 / TM4-TGT3 — SEMI_AUTO Controlled Forward Test
+
+- Added durable per-request SEMI_AUTO User approval lifecycle.
+- Real broker writes now require SEMI_AUTO mode, explicit global arming, current RM/broker truth, and current User approval.
+- Approval TTL prevents stale operator approval from becoming execution permission.
+- AUTO remains explicitly unavailable.
+- Added optional Zerodha Kite Connect reference execution adapter and safe operator CLI.
+- Added deterministic restart-safe Zerodha client-order correlation using broker tags.
+- Replaced timestamp-only RM/broker binding with a stable material broker risk-state token for fresh unchanged reconciliations.
+- Preserved PAPER default behavior and all TM1–TM4/TGT2 safety invariants.
+- Automated suite expanded; operational live acceptance remains pending a deliberately tiny forward test.
+
 ## Version 0.4.3 / TM4-TGT2 — Execution Simulation, Replay and Failure Injection
 
 - Added deterministic `SimulatedExecutionBroker` for controlled failure injection.

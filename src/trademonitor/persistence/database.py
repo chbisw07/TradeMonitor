@@ -234,5 +234,17 @@ class Database:
 
                 CREATE INDEX IF NOT EXISTS idx_execution_requests_status
                     ON execution_requests(status);
+
+                CREATE TABLE IF NOT EXISTS execution_approvals (
+                    approval_id TEXT PRIMARY KEY,
+                    request_id TEXT NOT NULL,
+                    record_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(request_id) REFERENCES execution_requests(request_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_execution_approvals_request
+                    ON execution_approvals(request_id, updated_at);
                 """
             )
