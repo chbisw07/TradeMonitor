@@ -30,6 +30,32 @@ TM3/TGT4 now provides durable PAPER-only exit proposals, partial-exit shapes, du
 
 
 
+
+## Google Sheet PAPER intake trial
+
+A read-only optional Google Sheet feeder is available for exercising real `Top Picks` candidates through the canonical TM Intake boundary while keeping execution simulation-only.
+
+Install optional support:
+
+```bash
+pip install -e '.[google]'
+```
+
+Configure `.env`, then validate mapping first:
+
+```bash
+python scripts/feed_google_top_picks.py --dry-run --limit 5
+```
+
+If the mapping is correct, persist the observations into TM:
+
+```bash
+python scripts/feed_google_top_picks.py --limit 5
+python scripts/run_dev.py
+```
+
+See `docs/GOOGLE_SHEET_FEEDER.md`. Google-specific field names remain entirely outside TM core.
+
 ## TM4/TGT1 — Module M
 
 TM4/TGT1 introduces the execution-deployment boundary without enabling real broker writes:

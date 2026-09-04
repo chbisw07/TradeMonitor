@@ -1,3 +1,11 @@
+
+## 0.4.1 - Google Sheet PAPER integration harness
+
+- Added optional read-only Google Sheets adapter and `feed_google_top_picks.py`.
+- Added canonical Top Picks mapping with local row-fingerprint de-duplication.
+- Added `.env` placeholders and optional `google` dependency extra.
+- Added feeder setup documentation and integration tests.
+- No real broker-write capability was added.
 # Changelog
 
 ## Version 0.4.0 / TM4-TGT1 — Module M and Broker Deployment

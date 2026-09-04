@@ -1,9 +1,28 @@
-"""External integration adapters for TradeMonitor.
+"""External-source adapter boundaries for TradeMonitor."""
 
-Adapters translate external source-specific formats into TradeMonitor's canonical
-intake contract. Core domains must not depend on the schema of any adapter.
-"""
+from trademonitor.adapters.intake import CanonicalTradeObservation, MappingTradeAdapter
+from trademonitor.adapters.google_sheet import (
+    FeederState,
+    GoogleSheetConfig,
+    GoogleSheetConfigurationError,
+    GoogleSheetDependencyError,
+    GoogleSheetReader,
+    GoogleSheetRow,
+    GoogleTopPicksAdapter,
+    PreparedGoogleObservation,
+    load_dotenv_file,
+)
 
-from .intake import CanonicalTradeObservation, MappingTradeAdapter
-
-__all__ = ["CanonicalTradeObservation", "MappingTradeAdapter"]
+__all__ = [
+    "CanonicalTradeObservation",
+    "MappingTradeAdapter",
+    "FeederState",
+    "GoogleSheetConfig",
+    "GoogleSheetConfigurationError",
+    "GoogleSheetDependencyError",
+    "GoogleSheetReader",
+    "GoogleSheetRow",
+    "GoogleTopPicksAdapter",
+    "PreparedGoogleObservation",
+    "load_dotenv_file",
+]

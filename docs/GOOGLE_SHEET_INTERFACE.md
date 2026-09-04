@@ -33,4 +33,6 @@ The exact workbook schema belongs to that adapter/configuration only.
 
 Different users may therefore use different Google Sheet formats without changing the TradeMonitor core.
 
-No live Google Sheets ingestion is implemented at the current milestone. See `INTEGRATION_INTERFACE.md` for the canonical interface and adapter responsibilities.
+A PAPER-only read-only Google Top Picks feeder is available as `scripts/feed_google_top_picks.py`. It maps source rows into the canonical intake contract and never writes to a broker. See `GOOGLE_SHEET_FEEDER.md` for setup and trial steps.
+
+See `INTEGRATION_INTERFACE.md` for the canonical interface and adapter responsibilities.

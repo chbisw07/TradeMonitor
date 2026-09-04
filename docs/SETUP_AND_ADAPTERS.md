@@ -49,12 +49,17 @@ Source-specific settings belong to the source adapter. Broker credentials/settin
 
 ## Current Development State
 
-As of TM3/TGT4:
+As of TM4/TGT1 plus the source-integration harness:
 
 - the canonical core intake boundary exists,
 - a source-neutral mapping adapter exists,
-- Google Sheets remains an optional placeholder integration,
+- Google Sheets remains optional; a read-only PAPER Top Picks feeder is available,
 - no real broker write/execution capability exists yet,
 - the actual external Agents service is not implemented inside TM.
 
 More user-facing setup commands and concrete adapters can evolve without changing the core architecture.
+
+
+## Google Sheet PAPER trial
+
+See `GOOGLE_SHEET_FEEDER.md`. Install optional support with `pip install -e '.[google]'`, then follow the feeder guide.
