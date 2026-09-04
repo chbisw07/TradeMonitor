@@ -21,6 +21,9 @@ from trademonitor.domain.enums import (
     ManagementRuleStatus,
     ManagementSignal,
     ConditionOperator,
+    ExitProposalClass,
+    ExitAction,
+    ExitProposalStatus,
 )
 
 
@@ -1355,3 +1358,78 @@ class ManagementRuleEvaluation:
     evaluated_at: datetime
     effective_value: Decimal | None = None
 
+
+
+@dataclass(frozen=True)
+class ExitProposal:
+    """Durable proposed reduction of one MANAGED broker-confirmed position.
+
+    This is a decision object only. TM3/TGT3 intentionally has no ExecutionRequest
+    or broker write path. Multiple triggers may be coalesced into one proposal.
+    """
+
+    proposal_id: str
+    position_id: str
+    proposal_class: ExitProposalClass
+    action: ExitAction
+    requested_quantity: int | None
+    requested_percent: Decimal | None
+    status: ExitProposalStatus
+    reasons: tuple[str, ...]
+    trigger_rule_ids: tuple[str, ...]
+    created_at: datetime
+    updated_at: datetime
+    created_by: str
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "proposal_id": self.proposal_id,
+            "position_id": self.position_id,
+            "proposal_class": self.proposal_class.value,
+            "action": self.action.value,
+            "requested_quantity": self.requested_quantity,
+            "requested_percent": None if self.requested_percent is None else str(self.requested_percent),
+            "status": self.status.value,
+            "reasons": list(self.reasons),
+            "trigger_rule_ids": list(self.trigger_rule_ids),
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "created_by": self.created_by,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "ExitProposal":
+        return cls(
+            proposal_id=str(record["proposal_id"]),
+            position_id=str(record["position_id"]),
+            proposal_class=ExitProposalClass(str(record["proposal_class"])),
+            action=ExitAction(str(record["action"])),
+            requested_quantity=(None if record.get("requested_quantity") is None else int(record["requested_quantity"])),
+            requested_percent=_decimal(record.get("requested_percent")),
+            status=ExitProposalStatus(str(record["status"])),
+            reasons=tuple(str(x) for x in record.get("reasons", [])),
+            trigger_rule_ids=tuple(str(x) for x in record.get("trigger_rule_ids", [])),
+            created_at=datetime.fromisoformat(str(record["created_at"])),
+            updated_at=datetime.fromisoformat(str(record["updated_at"])),
+            created_by=str(record["created_by"]),
+        )
+
+
+@dataclass(frozen=True)
+class PositionConversionRequest:
+    """Explicit User request to change holding intent without broker execution."""
+
+    position_id: str
+    new_trade_type: TradeType
+    new_horizon_at: datetime
+    requested_at: datetime
+    requested_by: str
+    reason: str
+
+    def __post_init__(self) -> None:
+        if not self.requested_by.strip():
+            raise ValueError("requested_by is required")
+        if not self.reason.strip():
+            raise ValueError("reason is required")
+        if self.new_horizon_at < self.requested_at:
+            raise ValueError("new_horizon_at cannot be earlier than request time")

@@ -210,3 +210,34 @@ class ManagementSignal(StrEnum):
 
     NONE = "NONE"
     EXIT_REVIEW = "EXIT_REVIEW"
+
+
+class ExitProposalClass(StrEnum):
+    """Why an exit proposal exists; authority remains outside Module M."""
+
+    PROTECTIVE = "PROTECTIVE"
+    DETERMINISTIC = "DETERMINISTIC"
+    STRATEGIC = "STRATEGIC"
+
+
+class ExitAction(StrEnum):
+    """Position-reduction action proposed by the Exit Monitor."""
+
+    EXIT_ALL = "EXIT_ALL"
+    EXIT_QTY = "EXIT_QTY"
+    EXIT_PERCENT = "EXIT_PERCENT"
+
+
+class ExitProposalStatus(StrEnum):
+    """Lifecycle before TM4 execution deployment exists."""
+
+    PENDING = "PENDING"
+    CANCELLED = "CANCELLED"
+    SUPERSEDED = "SUPERSEDED"
+    SATISFIED_BY_BROKER = "SATISFIED_BY_BROKER"
+
+
+class PositionConversionStatus(StrEnum):
+    """Result of a deliberate holding-intent conversion."""
+
+    APPLIED = "APPLIED"

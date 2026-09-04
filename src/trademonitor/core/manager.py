@@ -15,7 +15,7 @@ from trademonitor.core.context import RuntimeContexts
 from trademonitor.core.event_bus import EventBus
 from trademonitor.core.health import DomainHealthReport, FaultReport
 from trademonitor.core.recovery import FreshnessRelation, compare_observation_time, runtime_fingerprint
-from trademonitor.domain.enums import AgentVerdict, AttentionLevel, AttentionStatus, EntryIntentState, HealthStatus, RiskDecision
+from trademonitor.domain.enums import AgentVerdict, AttentionLevel, AttentionStatus, EntryIntentState, HealthStatus, RiskDecision, ExitAction, ExitProposalClass
 from trademonitor.domain.events import DomainEvent
 from trademonitor.domain.models import (
     AttentionItem,
@@ -36,12 +36,15 @@ from trademonitor.domain.models import (
     PositionManagementRule,
     PositionManagementSnapshot,
     ManagementRuleEvaluation,
+    ExitProposal,
+    PositionConversionRequest,
 )
 from trademonitor.entry.monitor import EntryMonitor
 from trademonitor.entry.review import EntryReviewCoordinator
 from trademonitor.persistence.repository import RuntimeRepository
 from trademonitor.positions.manager import PositionAdoptionError, PositionManager
 from trademonitor.positions.rules import ManagementRuleEngine
+from trademonitor.positions.exit import ExitMonitor
 from trademonitor.risk.engine import RiskEngine
 
 
@@ -59,6 +62,7 @@ class CoreTMManager:
         self._contexts = RuntimeContexts.empty()
         self._positions = PositionManager(repository)
         self._management_rules = ManagementRuleEngine(repository, self._positions)
+        self._exit = ExitMonitor(repository, self._positions)
         self._intake = TradeIntakeManager(
             repository, positions_provider=lambda: self._positions.list_positions(open_only=True)
         )
@@ -646,6 +650,10 @@ class CoreTMManager:
                 self.patch_context(
                     "broker", broker_values, source="BROKER", reason="broker truth reconciliation"
                 )
+                for position in positions:
+                    if not position.is_open:
+                        for event in self._exit.reconcile_with_broker(position.position_id, at=snapshot.observed_at):
+                            self._record_event(event)
                 self._refresh_position_context(source="POSITION")
                 self.report_domain_health(
                     DomainHealthReport.create(
@@ -808,6 +816,11 @@ class CoreTMManager:
             evaluations, events = self._management_rules.evaluate(position_id, snapshot)
             for event in events:
                 self._record_event(event)
+            _proposals, exit_events = self._exit.consume_rule_evaluations(
+                position_id, evaluations, at=snapshot.observed_at
+            )
+            for event in exit_events:
+                self._record_event(event)
             self._refresh_position_context(source="POSITION")
             return evaluations
 
@@ -837,6 +850,59 @@ class CoreTMManager:
             return self._management_rules.list_rules(
                 position_id=position_id, active_only=active_only
             )
+
+    def propose_position_exit(
+        self,
+        position_id: str,
+        *,
+        proposal_class: ExitProposalClass,
+        action: ExitAction,
+        at: datetime,
+        created_by: str,
+        reason: str,
+        requested_quantity: int | None = None,
+        requested_percent: str | int | float | None = None,
+    ) -> ExitProposal:
+        """Create a strategic/deterministic PAPER exit proposal; never broker execution."""
+        with self._lock:
+            self._ensure_started()
+            proposal, events = self._exit.propose_exit(
+                position_id,
+                proposal_class=proposal_class,
+                action=action,
+                at=at,
+                created_by=created_by,
+                reason=reason,
+                requested_quantity=requested_quantity,
+                requested_percent=requested_percent,
+            )
+            for event in events:
+                self._record_event(event)
+            self._refresh_position_context(source="EXIT")
+            return proposal
+
+    def evaluate_day_end(self, position_id: str, *, at: datetime, cutoff_at: datetime) -> ExitProposal | None:
+        with self._lock:
+            self._ensure_started()
+            proposal, events = self._exit.day_end_review(position_id, at=at, cutoff_at=cutoff_at)
+            for event in events:
+                self._record_event(event)
+            self._refresh_position_context(source="EXIT")
+            return proposal
+
+    def convert_managed_position(self, request: PositionConversionRequest) -> PositionManagementProfile:
+        with self._lock:
+            self._ensure_started()
+            profile, events = self._exit.convert_position(request)
+            for event in events:
+                self._record_event(event)
+            self._refresh_position_context(source="POSITION")
+            return profile
+
+    def exit_proposals_snapshot(self, *, position_id: str | None = None, active_only: bool = False) -> list[ExitProposal]:
+        with self._lock:
+            self._ensure_started()
+            return self._exit.list_proposals(position_id=position_id, active_only=active_only)
 
     def position_management_profile(
         self, position_id: str
@@ -959,6 +1025,10 @@ class CoreTMManager:
                 "total": len(rules),
                 "active": len(active_rules),
                 "triggered": len(triggered_rules),
+            },
+            "exit_proposals": {
+                "total": len(self._exit.list_proposals()),
+                "pending": len(self._exit.list_proposals(active_only=True)),
             },
         }
         context = self._contexts.get("position")

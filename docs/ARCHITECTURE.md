@@ -100,3 +100,16 @@ The flow is:
 `MANAGED Position + Management Profile + Current Facts -> ManagementRuleEngine -> Rule Evaluations / EXIT_REVIEW signals -> (TM3/TGT3 Exit Monitor later)`
 
 The rule engine is below the Position ownership boundary, remains deterministic, and never crosses the `UNMANAGED` boundary.
+
+
+## TM3/TGT3 — Exit Monitor and Position Evolution
+
+The Exit Monitor is the Position/Exit domain owner for proposed position reduction. It consumes deterministic management-rule signals and explicit strategic/user requests and creates durable `ExitProposal` decision objects. Exit proposals are not broker orders and cannot reach a broker in TM3.
+
+- Protective, deterministic, and strategic exit proposals are distinguished.
+- `EXIT_ALL`, `EXIT_QTY`, and `EXIT_PERCENT` are represented without execution.
+- A pending full-exit proposal owns the position's exit path; later full-exit triggers are coalesced and competing partial exits are suppressed.
+- DAY positions can produce an end-of-day exit proposal unless deliberately converted beforehand.
+- Holding-intent conversion updates the Position Management Profile only; it is not a broker operation.
+- Broker truth remains final: if reconciliation shows the position closed, pending exit proposals are marked satisfied by broker reality.
+- `UNMANAGED` positions remain outside Exit Monitor authority.

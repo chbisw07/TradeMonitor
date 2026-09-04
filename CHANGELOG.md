@@ -1,5 +1,18 @@
 # Changelog
 
+## Version 0.3.2 / TM3-TGT3 — Exit Monitor and Position Evolution
+
+- Added durable Exit Monitor and Exit Proposal decision model.
+- Added protective, deterministic, and strategic exit classifications.
+- Added `EXIT_ALL`, `EXIT_QTY`, and `EXIT_PERCENT` proposal shapes.
+- Added duplicate/coalesced full-exit handling and conflicting partial-exit suppression.
+- Routed triggered deterministic management rules into Exit Monitor proposals.
+- Added DAY end-of-day protection and explicit holding-intent conversion.
+- Added broker-truth convergence that marks pending proposals satisfied when exposure is closed.
+- Added restart persistence and control-room exit-proposal counts.
+- Preserved PAPER-only, `UNMANAGED` read-only, and no-Module-M boundaries.
+- Validation: 91 tests passed.
+
 ## Version 0.3.1 / TM3-TGT2 — Deterministic Management Rules
 
 - Added durable deterministic managed-position rule engine.

@@ -26,7 +26,8 @@ The previous TM0 placeholder milestone list is superseded by the four-milestone 
 **TM3 — Position Management + Exit: IN PROGRESS**
 
 - TGT1 — Position Manager and Adoption: **COMPLETE**
-- TGT2 — Deterministic Management Rules: **COMPLETE IN THIS WORKING TREE**
-- Next: TGT3 — Exit Monitor and Position Evolution
+- TGT2 — Deterministic Management Rules: **COMPLETE**
+- TGT3 — Exit Monitor and Position Evolution: **COMPLETE IN THIS WORKING TREE**
+- Next: TGT4 — Exit Agents and Escalation
 
-TM3/TGT2 adds deterministic managed-position rule evaluation while preserving the hard `UNMANAGED` boundary and broker truth. See `TM3_TGT2_ACCEPTANCE.md`.
+TM3/TGT3 converts triggered management signals and explicit strategic requests into durable PAPER-only Exit Proposals, supports partial-exit intent, suppresses conflicting exit paths, protects DAY end-of-day behavior, supports deliberate holding-intent conversion, and converges to broker truth on closure. See `TM3_TGT3_ACCEPTANCE.md`.

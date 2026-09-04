@@ -94,3 +94,14 @@
 - Rule creation, policy installation, arming/ratcheting, triggering, and cancellation are auditable.
 - Broker truth remains authoritative for position quantity/state/average price while TM rules govern only management intent.
 - TM3/TGT2 remains PAPER-only and exposes no broker-write path.
+
+
+## TM3/TGT3 Exit Safety Invariants
+
+- Exit proposals are decision objects only; TM3/TGT3 has no broker-write path and no `ExecutionRequest`.
+- `UNMANAGED` positions cannot receive exit proposals or holding-intent conversion.
+- Multiple full-exit triggers for the same position are coalesced into one pending full-exit path.
+- A pending full exit suppresses later partial-exit proposals; a later full exit supersedes earlier pending partial proposals.
+- DAY end-of-day handling cannot silently convert a DAY position into overnight exposure.
+- Position conversion is explicit, user-attributed, reasoned, logged, and changes TM intent only.
+- Broker-confirmed closure overrides internal exit expectations and satisfies pending proposals.

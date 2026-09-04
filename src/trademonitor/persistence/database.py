@@ -109,6 +109,19 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_management_rules_position_status
                     ON position_management_rules(position_id, status);
 
+                CREATE TABLE IF NOT EXISTS exit_proposals (
+                    proposal_id TEXT PRIMARY KEY,
+                    position_id TEXT NOT NULL,
+                    record_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(position_id) REFERENCES positions(position_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_exit_proposals_position_status
+                    ON exit_proposals(position_id, status);
+
                                 CREATE TABLE IF NOT EXISTS intake_outcomes (
                     outcome_id TEXT PRIMARY KEY,
                     outcome_key TEXT NOT NULL UNIQUE,

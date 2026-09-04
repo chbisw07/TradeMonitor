@@ -1,5 +1,7 @@
 # TradeMonitor
 
+**Current milestone:** TM3/TGT3 — Exit Monitor and Position Evolution
+
 TradeMonitor is being developed as a professional trade-monitoring, risk-governance, position-management, and execution system for Indian markets.
 
 The canonical design references are kept under `docs/`:
@@ -24,7 +26,7 @@ TM1 and TM2 are complete. TM3 now includes deterministic managed-position rules:
 
 **NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM3/TGT2.**
 
-Exit proposals, partial exits, duplicate-exit suppression, and position conversion belong to TM3/TGT3. Module M and real execution remain TM4 scope.
+TM3/TGT3 now provides durable PAPER-only exit proposals, partial-exit shapes, duplicate/conflicting exit suppression, DAY end-of-day protection, deliberate position holding-intent conversion, and broker-truth closure convergence. Module M and real execution remain TM4 scope.
 
 ## Development Setup
 
