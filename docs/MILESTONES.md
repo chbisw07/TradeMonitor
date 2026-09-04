@@ -54,4 +54,12 @@ Implemented durable Entry/Exit ExecutionRequests, current-RM entry authorization
 - Fresh unchanged broker reads no longer invalidate RM solely due to a new observation timestamp; a stable risk-state token binds material account facts.
 - Operational completion requires a tiny reviewed real-broker forward test.
 
-**Next after live acceptance:** TM4/TGT4 — AUTO Readiness.
+**TM4/TGT4 — AUTO Readiness — CODE COMPLETE**
+
+- Durable evidence-gated AUTO readiness assessment.
+- Explicit evidence-bound User enable decision.
+- Evidence changes revoke prior AUTO authorization.
+- AUTO startup requires readiness + explicit decision + dual environment arming.
+- PAPER default and SEMI_AUTO per-request approval preserved.
+
+See `TM4_TGT4_ACCEPTANCE.md`.

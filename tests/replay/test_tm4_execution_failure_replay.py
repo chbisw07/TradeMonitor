@@ -180,7 +180,7 @@ def test_stale_broker_order_snapshot_cannot_roll_execution_state_backward(tmp_pa
     tm, request, t = _approved_entry(tmp_path)
     broker = SimulatedExecutionBroker(name="SIM")
     submitted = tm.deploy_execution_request(request.request_id, broker)
-    fresh_time = t + timedelta(minutes=20)
+    fresh_time = submitted.last_broker_observed_at + timedelta(minutes=1)
     broker.set_order_truth(
         submitted.broker_order_id, status=BrokerOrderStatus.PARTIALLY_FILLED,
         filled_quantity=50, average_fill_price="149", observed_at=fresh_time

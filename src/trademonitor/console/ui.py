@@ -12,7 +12,7 @@ class ConsoleUI:
     """Render concise runtime state without owning business logic."""
 
     def render_status(self, snapshot: Mapping[str, Mapping[str, Any]]) -> str:
-        lines = ["TradeMonitor TM4/TGT3", "=" * 72]
+        lines = ["TradeMonitor TM4/TGT4", "=" * 72]
         health = snapshot.get("health", {}).get("data", {})
         broker = snapshot.get("broker", {}).get("data", {})
         positions = snapshot.get("position", {}).get("data", {})
@@ -88,12 +88,22 @@ class ConsoleUI:
         approvals = execution.get("approvals", {})
         approval_states = approvals.get("by_status", {})
         approval_text = ", ".join(f"{name}={count}" for name, count in sorted(approval_states.items())) or "none"
-        real_writes = "ARMED/SEMI_AUTO" if execution.get("real_broker_writes_enabled") else "DISABLED"
+        real_writes = (f"ARMED/{execution.get('mode', 'UNKNOWN')}" if execution.get("real_broker_writes_enabled") else "DISABLED")
         lines.append(
             f"Execution: Requests {execution.get('total_requests', 0)} | Status: {exec_text} | Real broker writes: {real_writes}"
         )
         lines.append(
             f"SEMI_AUTO Approvals: Total {approvals.get('total', 0)} | Status: {approval_text} | TTL {execution.get('semi_auto_approval_ttl_seconds', '-')}s"
+        )
+        auto = execution.get("auto_readiness", {})
+        auto_assessment = auto.get("assessment", {})
+        auto_decision = auto.get("decision", {})
+        lines.append(
+            "AUTO Readiness: {state} | Decision: {decision} | Blockers: {blockers}".format(
+                state="READY" if auto_assessment.get("ready") else "NOT_READY",
+                decision=auto_decision.get("status", "NOT_DECIDED"),
+                blockers=", ".join(auto_assessment.get("blockers", [])) or "none",
+            )
         )
         lines.append("")
         lines.append("Domain Health")
@@ -120,7 +130,7 @@ class ConsoleUI:
             )
         lines.append("")
         if health.get("live_execution_enabled"):
-            lines.append("SEMI_AUTO REAL BROKER WRITES ARMED — EACH REQUEST STILL REQUIRES CURRENT RM PERMISSION + EXPLICIT USER APPROVAL")
+            lines.append("REAL BROKER WRITES ARMED — SEMI_AUTO REQUIRES EXPLICIT USER APPROVAL; AUTO REQUIRES CURRENT READINESS + RM AUTHORITY")
         else:
             lines.append("NO LIVE TRADING CAPABILITY — REAL BROKER WRITES ARE DISABLED")
         return "\n".join(lines)

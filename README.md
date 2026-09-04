@@ -1,6 +1,6 @@
 # TradeMonitor
 
-**Current milestone:** TM4/TGT3 — SEMI_AUTO Controlled Forward Test (code-ready; live acceptance pending)
+**Current milestone:** TM4/TGT4 — AUTO Readiness (evidence-gated)
 
 TradeMonitor is being developed as a professional trade-monitoring, risk-governance, position-management, and execution system for Indian markets.
 
@@ -24,7 +24,7 @@ TM1 and TM2 are complete. TM3 now includes deterministic managed-position rules:
 - triggered rules emit auditable `EXIT_REVIEW` signals only; they do not create ExecutionRequests
 - broker truth remains authoritative and `UNMANAGED` positions remain read-only
 
-**PAPER remains the default. TM4/TGT3 contains a deliberately gated SEMI_AUTO real-broker path; it is disabled unless explicitly armed and still requires per-request User approval plus current RM permission. AUTO remains unavailable.**
+**PAPER remains the default. SEMI_AUTO retains deliberate real-broker arming and per-request User approval. TM4/TGT4 adds an evidence-gated AUTO readiness/enable boundary; AUTO cannot start without reviewed persisted evidence, an explicit enable decision, and dual runtime arming.**
 
 TM3/TGT4 now provides durable PAPER-only exit proposals, partial-exit shapes, duplicate/conflicting exit suppression, DAY end-of-day protection, deliberate position holding-intent conversion, and broker-truth closure convergence. Module M and real execution remain TM4 scope.
 
@@ -146,3 +146,18 @@ python scripts/zerodha_read_only.py
 ```
 
 This path has no order mutation methods and forcibly keeps real broker writes disabled. See `docs/ZERODHA_READ_ONLY_RECONCILIATION.md`.
+
+
+## TM4/TGT4 — AUTO Readiness
+
+AUTO is now an evidence-gated capability rather than an automatic progression from SEMI_AUTO. TradeMonitor records a reviewed evidence pack, computes deterministic blockers, binds an explicit `ENABLE AUTO` decision to that evidence, and refuses AUTO startup unless both `TM_ALLOW_AUTO_EXECUTION=true` and `TM_ALLOW_REAL_BROKER_WRITES=true` are deliberately armed. Changed evidence revokes the prior enable decision.
+
+The current real Zerodha **read-only** reconciliation success is valuable broker-integration evidence, but it does not count as a real SEMI_AUTO execution. Therefore AUTO should remain `NOT READY` until real controlled SEMI_AUTO evidence exists.
+
+Inspect the gate with:
+
+```bash
+python scripts/auto_readiness.py
+```
+
+See `docs/TM4_TGT4_ACCEPTANCE.md`.

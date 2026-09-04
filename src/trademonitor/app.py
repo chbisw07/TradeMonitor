@@ -17,14 +17,15 @@ def build_manager(settings: Settings | None = None) -> CoreTMManager:
         execution_mode=settings.execution_mode,
         allow_real_broker_writes=settings.allow_real_broker_writes,
         semi_auto_approval_ttl_seconds=settings.semi_auto_approval_ttl_seconds,
+        allow_auto_execution=settings.allow_auto_execution,
     )
 
 
 def main() -> None:
-    """Start the TM4/TGT3 control-room runtime.
+    """Start the TM4/TGT4 control-room runtime.
 
-    Defaults remain PAPER-only. SEMI_AUTO real writes require explicit settings,
-    a non-simulation broker adapter, current Risk permission, and per-request User approval.
+    Defaults remain PAPER-only. SEMI_AUTO retains per-request approval. AUTO additionally
+    requires persisted readiness evidence, an explicit enable decision, and dual arming.
     """
     manager = build_manager()
     manager.start()

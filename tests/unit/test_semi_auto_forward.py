@@ -181,10 +181,12 @@ def test_approval_ttl_is_enforced(tmp_path):
         tm.deploy_execution_request(req.request_id, PretendLiveBroker(name="MOCK"))
 
 
-def test_auto_mode_is_not_available_in_tgt3(tmp_path):
+def test_auto_mode_is_evidence_gated_in_tgt4(tmp_path):
     repo = SQLiteRuntimeRepository(Database(tmp_path / "auto.db"))
-    with pytest.raises(ValueError, match="AUTO"):
-        CoreTMManager(repo, execution_mode=ExecutionMode.AUTO)
+    tm = CoreTMManager(repo, execution_mode=ExecutionMode.AUTO)
+    from trademonitor.execution.readiness import AutoReadinessError
+    with pytest.raises(AutoReadinessError, match="TM_ALLOW_AUTO_EXECUTION"):
+        tm.start()
 
 
 def test_fresh_same_broker_truth_does_not_invalidate_risk_pass(tmp_path):

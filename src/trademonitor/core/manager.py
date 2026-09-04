@@ -6,6 +6,8 @@ from collections.abc import Mapping, Sequence
 import hashlib
 import json
 from datetime import datetime
+
+from trademonitor.domain.models import utc_now
 from threading import RLock
 from typing import Any
 
@@ -56,6 +58,9 @@ from trademonitor.risk.engine import RiskEngine
 from trademonitor.execution.requests import ExecutionRequestBuilder, ExecutionAuthorizationError
 from trademonitor.execution.engine import ExecutionEngine
 from trademonitor.execution.approval import SemiAutoApprovalCoordinator, SemiAutoApprovalError
+from trademonitor.execution.readiness import (
+    AutoReadinessEvidence, AutoReadinessError, AutoReadinessGate,
+)
 
 
 class CoreTMManager:
@@ -74,13 +79,13 @@ class CoreTMManager:
         execution_mode: ExecutionMode = ExecutionMode.PAPER,
         allow_real_broker_writes: bool = False,
         semi_auto_approval_ttl_seconds: int = 60,
+        allow_auto_execution: bool = False,
     ) -> None:
         self._repository = repository
         self._event_bus = event_bus or EventBus()
         self._execution_mode = ExecutionMode(execution_mode)
-        if self._execution_mode == ExecutionMode.AUTO:
-            raise ValueError("TM4/TGT3 does not permit AUTO mode")
         self._allow_real_broker_writes = bool(allow_real_broker_writes)
+        self._allow_auto_execution = bool(allow_auto_execution)
         self._semi_auto_approval_ttl_seconds = int(semi_auto_approval_ttl_seconds)
         self._contexts = RuntimeContexts.empty()
         self._positions = PositionManager(repository)
@@ -119,6 +124,8 @@ class CoreTMManager:
             self._repository.initialize()
             records = self._repository.load_contexts()
             self._contexts = RuntimeContexts.from_records(records) if records else RuntimeContexts.empty()
+            if self._execution_mode == ExecutionMode.AUTO:
+                self._assert_auto_runtime_start_allowed()
 
             health = self._contexts.get("health")
             domains = dict(health.data.get("domains", {}))
@@ -131,7 +138,8 @@ class CoreTMManager:
                     "runtime": "STARTED",
                     "execution_mode": self._execution_mode.value,
                     "live_execution_enabled": (
-                        self._execution_mode == ExecutionMode.SEMI_AUTO and self._allow_real_broker_writes
+                        self._allow_real_broker_writes
+                        and (self._execution_mode == ExecutionMode.SEMI_AUTO or (self._execution_mode == ExecutionMode.AUTO and self._allow_auto_execution))
                     ),
                     "domains": domains,
                 }
@@ -568,11 +576,12 @@ class CoreTMManager:
             if pending is None:
                 raise KeyError(f"Unknown execution request: {request_id}")
             if broker.is_simulation:
-                if self._execution_mode not in {ExecutionMode.PAPER, ExecutionMode.SEMI_AUTO}:
+                if self._execution_mode not in {ExecutionMode.PAPER, ExecutionMode.SEMI_AUTO, ExecutionMode.AUTO}:
                     raise PermissionError("Simulation deployment is unavailable in this execution mode")
             else:
                 self._assert_real_broker_write_enabled()
-                self._execution_approval.assert_current_approval(pending)
+                if self._execution_mode == ExecutionMode.SEMI_AUTO:
+                    self._execution_approval.assert_current_approval(pending)
             if pending.status == ExecutionRequestStatus.READY:
                 if pending.purpose == ExecutionPurpose.ENTRY:
                     self._assert_entry_execution_authorization_current(pending)
@@ -1223,10 +1232,131 @@ class CoreTMManager:
             return runtime_fingerprint(self.status_snapshot(), self.positions_snapshot())
 
     def _assert_real_broker_write_enabled(self) -> None:
-        if self._execution_mode != ExecutionMode.SEMI_AUTO:
-            raise PermissionError("Real broker writes require SEMI_AUTO mode in TM4/TGT3")
+        if self._execution_mode == ExecutionMode.SEMI_AUTO:
+            if not self._allow_real_broker_writes:
+                raise PermissionError("Real broker writes are not armed; set TM_ALLOW_REAL_BROKER_WRITES=true deliberately")
+            return
+        if self._execution_mode == ExecutionMode.AUTO:
+            self._assert_auto_runtime_start_allowed()
+            if not self._allow_real_broker_writes:
+                raise PermissionError("AUTO broker writes also require TM_ALLOW_REAL_BROKER_WRITES=true")
+            return
+        raise PermissionError("Real broker writes require SEMI_AUTO or evidence-gated AUTO mode in TM4/TGT4")
+
+    def _auto_readiness_record(self) -> dict:
+        execution = self._contexts.get("execution").data
+        current = execution.get("auto_readiness")
+        if isinstance(current, dict):
+            return dict(current)
+        evidence = AutoReadinessEvidence()
+        assessment = AutoReadinessGate.assess(evidence)
+        return {
+            "evidence": evidence.to_record(),
+            "assessment": assessment.to_record(),
+            "decision": {"enabled": False, "status": "NOT_DECIDED"},
+        }
+
+    def auto_readiness_snapshot(self) -> dict:
+        with self._lock:
+            self._ensure_started()
+            record = self._auto_readiness_record()
+            # Re-assess rather than trusting a stale derived flag.
+            evidence = AutoReadinessEvidence.from_mapping(record.get("evidence"))
+            assessment = AutoReadinessGate.assess(evidence)
+            record["assessment"] = assessment.to_record()
+            decision = dict(record.get("decision") or {"enabled": False, "status": "NOT_DECIDED"})
+            if decision.get("enabled") and decision.get("evidence_digest") != assessment.evidence_digest:
+                decision = {"enabled": False, "status": "REVOKED_EVIDENCE_CHANGED"}
+            record["decision"] = decision
+            return record
+
+    def record_auto_readiness_evidence(
+        self, evidence: AutoReadinessEvidence, *, recorded_by: str, at: datetime | None = None
+    ) -> dict:
+        with self._lock:
+            self._ensure_started()
+            stamp = at or utc_now()
+            evidence = AutoReadinessEvidence(**{
+                **evidence.to_record(),
+                "recorded_at": stamp.isoformat(),
+                "recorded_by": recorded_by.strip() or "UNKNOWN",
+            })
+            assessment = AutoReadinessGate.assess(evidence, at=stamp)
+            current = self._auto_readiness_record()
+            previous_decision = dict(current.get("decision") or {})
+            decision = previous_decision
+            if previous_decision.get("enabled"):
+                decision = {
+                    "enabled": False,
+                    "status": "REVOKED_EVIDENCE_CHANGED",
+                    "revoked_at": stamp.isoformat(),
+                }
+            record = {
+                "evidence": evidence.to_record(),
+                "assessment": assessment.to_record(),
+                "decision": decision or {"enabled": False, "status": "NOT_DECIDED"},
+            }
+            context = self._contexts.get("execution")
+            context.patch({"auto_readiness": record})
+            self._repository.save_context(context.to_record())
+            self._record_event(DomainEvent.create(
+                "AUTO_READINESS_EVIDENCE_RECORDED", source="EXECUTION",
+                payload={
+                    "recorded_by": evidence.recorded_by,
+                    "ready": assessment.ready,
+                    "blockers": list(assessment.blockers),
+                    "evidence_digest": assessment.evidence_digest,
+                }, occurred_at=stamp,
+            ))
+            return record
+
+    def decide_auto_enable(
+        self, *, enable: bool, decided_by: str, reason: str, confirmation: str, at: datetime | None = None
+    ) -> dict:
+        with self._lock:
+            self._ensure_started()
+            stamp = at or utc_now()
+            record = self.auto_readiness_snapshot()
+            assessment = record["assessment"]
+            expected = "ENABLE AUTO" if enable else "KEEP AUTO DISABLED"
+            if confirmation.strip() != expected:
+                raise AutoReadinessError(f"Explicit confirmation must be exactly {expected}")
+            if enable and not assessment.get("ready"):
+                raise AutoReadinessError(
+                    "AUTO is not READY; blockers: " + ", ".join(assessment.get("blockers", []))
+                )
+            decision = {
+                "enabled": bool(enable),
+                "status": "ENABLED" if enable else "DISABLED",
+                "decided_by": decided_by.strip() or "UNKNOWN",
+                "reason": reason.strip(),
+                "decided_at": stamp.isoformat(),
+                "evidence_digest": assessment.get("evidence_digest"),
+            }
+            record["decision"] = decision
+            context = self._contexts.get("execution")
+            context.patch({"auto_readiness": record})
+            self._repository.save_context(context.to_record())
+            self._record_event(DomainEvent.create(
+                "AUTO_ENABLE_DECIDED", source="EXECUTION", payload=decision, occurred_at=stamp
+            ))
+            return record
+
+    def _assert_auto_runtime_start_allowed(self) -> None:
+        if not self._allow_auto_execution:
+            raise AutoReadinessError("AUTO runtime is not armed; set TM_ALLOW_AUTO_EXECUTION=true deliberately")
         if not self._allow_real_broker_writes:
-            raise PermissionError("Real broker writes are not armed; set TM_ALLOW_REAL_BROKER_WRITES=true deliberately")
+            raise AutoReadinessError("AUTO runtime also requires TM_ALLOW_REAL_BROKER_WRITES=true")
+        record = self._auto_readiness_record()
+        evidence = AutoReadinessEvidence.from_mapping(record.get("evidence"))
+        assessment = AutoReadinessGate.assess(evidence)
+        decision = dict(record.get("decision") or {})
+        if not assessment.ready:
+            raise AutoReadinessError("AUTO readiness evidence is no longer READY")
+        if not decision.get("enabled"):
+            raise AutoReadinessError("AUTO has no explicit enabled decision")
+        if decision.get("evidence_digest") != assessment.evidence_digest:
+            raise AutoReadinessError("AUTO decision does not match current readiness evidence")
 
     def _assert_market_allows_new_risk(self) -> None:
         market_ctx = dict(self._contexts.get("market").data)
@@ -1376,6 +1506,7 @@ class CoreTMManager:
         for request in requests:
             by_status[request.status.value] = by_status.get(request.status.value, 0) + 1
         context = self._contexts.get("execution")
+        context.data.setdefault("auto_readiness", self._auto_readiness_record())
         approvals = self._execution_approval.list()
         approval_counts: dict[str, int] = {}
         for approval in approvals:
@@ -1383,8 +1514,10 @@ class CoreTMManager:
         context.patch({
             "mode": self._execution_mode.value,
             "real_broker_writes_enabled": (
-                self._execution_mode == ExecutionMode.SEMI_AUTO and self._allow_real_broker_writes
+                self._allow_real_broker_writes
+                and (self._execution_mode == ExecutionMode.SEMI_AUTO or (self._execution_mode == ExecutionMode.AUTO and self._allow_auto_execution))
             ),
+            "auto_runtime_armed": self._execution_mode == ExecutionMode.AUTO and self._allow_auto_execution,
             "semi_auto_approval_ttl_seconds": self._semi_auto_approval_ttl_seconds,
             "total_requests": len(requests),
             "by_status": by_status,

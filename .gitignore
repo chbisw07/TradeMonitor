@@ -16,9 +16,6 @@ htmlcov/
 # Environment / secrets
 .env
 
-# zerodha
-zerodha_access.env
-
 # IDE
 .vscode/
 .idea/
@@ -45,3 +42,6 @@ data/*
 *.db
 *.db-shm
 *.db-wal
+zerodha_access.env
+.env
+*.env
