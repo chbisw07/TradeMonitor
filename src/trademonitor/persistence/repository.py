@@ -21,6 +21,7 @@ from trademonitor.domain.models import (
     PositionManagementRule,
     ExitProposal,
     ExitReviewRecord,
+    ExecutionRequest,
 )
 from trademonitor.persistence.database import Database
 
@@ -160,10 +161,29 @@ class RuntimeRepository(ABC):
     def list_risk_decisions(self, *, entry_intent_id: str | None = None) -> list[RiskDecisionRecord]: ...
 
     @abstractmethod
+    def get_risk_decision(self, decision_id: str) -> RiskDecisionRecord | None: ...
+
+    @abstractmethod
+    def get_latest_risk_decision(self, entry_intent_id: str) -> RiskDecisionRecord | None: ...
+
+    @abstractmethod
     def save_risk_profile_change(self, record: Mapping[str, Any]) -> None: ...
 
     @abstractmethod
     def get_risk_profile_change(self, change_id: str) -> RiskProfileChange | None: ...
+
+
+    @abstractmethod
+    def save_execution_request(self, record: Mapping[str, Any]) -> None: ...
+
+    @abstractmethod
+    def get_execution_request(self, request_id: str) -> ExecutionRequest | None: ...
+
+    @abstractmethod
+    def get_execution_request_by_idempotency_key(self, idempotency_key: str) -> ExecutionRequest | None: ...
+
+    @abstractmethod
+    def list_execution_requests(self, *, status: str | None = None) -> list[ExecutionRequest]: ...
 
 
 # Backward-compatible name retained from TM0 skeleton.
@@ -814,6 +834,21 @@ class SQLiteRuntimeRepository(RuntimeRepository):
             rows = connection.execute(sql, params).fetchall()
         return [RiskDecisionRecord.from_record(json.loads(row["record_json"])) for row in rows]
 
+    def get_risk_decision(self, decision_id: str) -> RiskDecisionRecord | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM risk_decisions WHERE decision_id = ?", (decision_id,)
+            ).fetchone()
+        return None if row is None else RiskDecisionRecord.from_record(json.loads(row["record_json"]))
+
+    def get_latest_risk_decision(self, entry_intent_id: str) -> RiskDecisionRecord | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                """SELECT record_json FROM risk_decisions WHERE entry_intent_id = ?
+                   ORDER BY evaluated_at DESC, decision_id DESC LIMIT 1""", (entry_intent_id,)
+            ).fetchone()
+        return None if row is None else RiskDecisionRecord.from_record(json.loads(row["record_json"]))
+
     def save_risk_profile_change(self, record: Mapping[str, Any]) -> None:
         with self._database.connect() as connection:
             connection.execute(
@@ -829,4 +864,41 @@ class SQLiteRuntimeRepository(RuntimeRepository):
         if row is None:
             return None
         return RiskProfileChange.from_record(json.loads(row["record_json"]))
+
+    def save_execution_request(self, record: Mapping[str, Any]) -> None:
+        with self._database.connect() as connection:
+            connection.execute(
+                """INSERT INTO execution_requests(request_id, idempotency_key, record_json, status, updated_at)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(request_id) DO UPDATE SET
+                     record_json=excluded.record_json, status=excluded.status, updated_at=excluded.updated_at""",
+                (str(record["request_id"]), str(record["idempotency_key"]),
+                 json.dumps(dict(record), sort_keys=True, default=str),
+                 str(record["status"]), str(record["updated_at"])),
+            )
+
+    def get_execution_request(self, request_id: str) -> ExecutionRequest | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM execution_requests WHERE request_id = ?", (request_id,)
+            ).fetchone()
+        return None if row is None else ExecutionRequest.from_record(json.loads(row["record_json"]))
+
+    def get_execution_request_by_idempotency_key(self, idempotency_key: str) -> ExecutionRequest | None:
+        with self._database.connect() as connection:
+            row = connection.execute(
+                "SELECT record_json FROM execution_requests WHERE idempotency_key = ?", (idempotency_key,)
+            ).fetchone()
+        return None if row is None else ExecutionRequest.from_record(json.loads(row["record_json"]))
+
+    def list_execution_requests(self, *, status: str | None = None) -> list[ExecutionRequest]:
+        sql = "SELECT record_json FROM execution_requests"
+        params: tuple[str, ...] = ()
+        if status is not None:
+            sql += " WHERE status = ?"
+            params = (status,)
+        sql += " ORDER BY updated_at, request_id"
+        with self._database.connect() as connection:
+            rows = connection.execute(sql, params).fetchall()
+        return [ExecutionRequest.from_record(json.loads(row["record_json"])) for row in rows]
 

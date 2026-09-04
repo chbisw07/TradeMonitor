@@ -223,5 +223,16 @@ class Database:
                     status TEXT NOT NULL,
                     requested_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS execution_requests (
+                    request_id TEXT PRIMARY KEY,
+                    idempotency_key TEXT NOT NULL UNIQUE,
+                    record_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_execution_requests_status
+                    ON execution_requests(status);
                 """
             )

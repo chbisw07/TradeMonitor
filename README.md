@@ -1,6 +1,6 @@
 # TradeMonitor
 
-**Current milestone:** TM3/TGT4 — Exit Agents and Escalation
+**Current milestone:** TM4/TGT1 — Module M and Broker Deployment
 
 TradeMonitor is being developed as a professional trade-monitoring, risk-governance, position-management, and execution system for Indian markets.
 
@@ -12,7 +12,7 @@ The canonical design references are kept under `docs/`:
 
 ## Current Status
 
-**TM3 / TGT4 — Exit Agents and Escalation — COMPLETE**
+**TM4 / TGT1 — Module M and Broker Deployment — COMPLETE**
 
 TM1 and TM2 are complete. TM3 now includes deterministic managed-position rules:
 
@@ -24,10 +24,23 @@ TM1 and TM2 are complete. TM3 now includes deterministic managed-position rules:
 - triggered rules emit auditable `EXIT_REVIEW` signals only; they do not create ExecutionRequests
 - broker truth remains authoritative and `UNMANAGED` positions remain read-only
 
-**NO LIVE TRADING OR BROKER-WRITE CAPABILITY EXISTS IN TM3/TGT4.**
+**NO REAL/LIVE BROKER-WRITE CAPABILITY EXISTS IN TM4/TGT1. Module M is enabled only for simulation adapters in PAPER mode.**
 
 TM3/TGT4 now provides durable PAPER-only exit proposals, partial-exit shapes, duplicate/conflicting exit suppression, DAY end-of-day protection, deliberate position holding-intent conversion, and broker-truth closure convergence. Module M and real execution remain TM4 scope.
 
+
+
+## TM4/TGT1 — Module M
+
+TM4/TGT1 introduces the execution-deployment boundary without enabling real broker writes:
+
+- durable, idempotent `ExecutionRequest` handoffs for both ENTRY and EXIT
+- entry handoff requires a current matching RM `PASS`; broker truth or Risk-profile changes invalidate stale permission
+- Module M resolves instruments, submits normalized orders, tracks acknowledgement/partial fill/fill/reject/cancel/uncertain states, and reconciles to broker order truth
+- repeat/restart deployment of the same authorized intent cannot blindly create a duplicate order
+- submission uncertainty is preserved as `UNCERTAIN`; missing acknowledgement is never interpreted as failure
+- the original read-only `Broker` interface remains separate from the opt-in `ExecutionBroker` interface
+- only simulation execution brokers are permitted in this target; real broker adapters remain TM4/TGT3 scope
 
 ## Independent Program / Adapter Boundary
 

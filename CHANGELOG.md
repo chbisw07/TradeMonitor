@@ -1,5 +1,18 @@
 # Changelog
 
+## Version 0.4.0 / TM4-TGT1 — Module M and Broker Deployment
+
+- Added durable, idempotent `ExecutionRequest` handoffs for both ENTRY and EXIT.
+- Enforced current Risk authorization for new exposure: latest RM PASS, active Risk-profile version, and unchanged broker truth.
+- Added isolated Module M deployment engine for instrument resolution, normalized submission, acknowledgement tracking and broker-order reconciliation.
+- Added durable SUBMITTING/SUBMITTED/PARTIALLY_FILLED/FILLED/REJECTED/CANCELLED/UNCERTAIN execution lifecycle.
+- Added explicit `ExecutionBroker` contract while preserving the universal read-only `Broker` truth contract.
+- Added deterministic simulation execution adapter for TGT1 validation only.
+- Added durable idempotency across repeated calls/restart; missing acknowledgement becomes UNCERTAIN rather than a blind retry.
+- Added versioned execution runtime context/control-room summary.
+- Preserved PAPER-only operation; real broker writes are explicitly rejected.
+- Full suite: 118 tests passing.
+
 ## Version 0.3.4 — Source-Independence Architecture Hardening
 
 - Audited TM3/TGT4 for accidental Google Sheet/scanner schema coupling; core Intake/Entry/Risk/Position/Exit domains remain source-neutral.

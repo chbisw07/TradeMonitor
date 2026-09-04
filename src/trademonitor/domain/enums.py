@@ -244,3 +244,44 @@ class PositionConversionStatus(StrEnum):
     """Result of a deliberate holding-intent conversion."""
 
     APPLIED = "APPLIED"
+
+
+class ExecutionPurpose(StrEnum):
+    """Whether an execution request creates or reduces broker exposure."""
+
+    ENTRY = "ENTRY"
+    EXIT = "EXIT"
+
+
+class OrderSide(StrEnum):
+    BUY = "BUY"
+    SELL = "SELL"
+
+
+class OrderType(StrEnum):
+    MARKET = "MARKET"
+    LIMIT = "LIMIT"
+
+
+class BrokerOrderStatus(StrEnum):
+    """Normalized broker order truth returned to Module M."""
+
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+    PARTIALLY_FILLED = "PARTIALLY_FILLED"
+    FILLED = "FILLED"
+    REJECTED = "REJECTED"
+    CANCELLED = "CANCELLED"
+    UNKNOWN = "UNKNOWN"
+
+
+class ExecutionRequestStatus(StrEnum):
+    """Durable Module M lifecycle for one authorized execution intent."""
+
+    READY = "READY"
+    SUBMITTING = "SUBMITTING"
+    SUBMITTED = "SUBMITTED"
+    PARTIALLY_FILLED = "PARTIALLY_FILLED"
+    FILLED = "FILLED"
+    REJECTED = "REJECTED"
+    CANCELLED = "CANCELLED"
+    UNCERTAIN = "UNCERTAIN"

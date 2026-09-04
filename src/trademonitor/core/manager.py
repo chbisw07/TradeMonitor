@@ -9,13 +9,14 @@ from typing import Any
 
 from trademonitor.agents.gateway import AgentGateway
 from trademonitor.brokers.base import Broker
+from trademonitor.brokers.execution import ExecutionBroker
 from trademonitor.candidates.manager import TradeIntakeManager
 from trademonitor.core.attention import create_attention_item, resolve_attention_item
 from trademonitor.core.context import RuntimeContexts
 from trademonitor.core.event_bus import EventBus
 from trademonitor.core.health import DomainHealthReport, FaultReport
 from trademonitor.core.recovery import FreshnessRelation, compare_observation_time, runtime_fingerprint
-from trademonitor.domain.enums import AgentVerdict, AttentionLevel, AttentionStatus, EntryIntentState, HealthStatus, RiskDecision, ExitAction, ExitProposalClass
+from trademonitor.domain.enums import AgentVerdict, AttentionLevel, AttentionStatus, EntryIntentState, HealthStatus, RiskDecision, ExitAction, ExitProposalClass, OrderSide, OrderType, ExecutionRequestStatus, ExecutionPurpose
 from trademonitor.domain.events import DomainEvent
 from trademonitor.domain.models import (
     AttentionItem,
@@ -39,6 +40,7 @@ from trademonitor.domain.models import (
     ExitProposal,
     ExitReviewRecord,
     PositionConversionRequest,
+    ExecutionRequest,
 )
 from trademonitor.entry.monitor import EntryMonitor
 from trademonitor.entry.review import EntryReviewCoordinator
@@ -48,6 +50,8 @@ from trademonitor.positions.rules import ManagementRuleEngine
 from trademonitor.positions.exit import ExitMonitor
 from trademonitor.positions.review import ExitReviewCoordinator
 from trademonitor.risk.engine import RiskEngine
+from trademonitor.execution.requests import ExecutionRequestBuilder, ExecutionAuthorizationError
+from trademonitor.execution.engine import ExecutionEngine
 
 
 class CoreTMManager:
@@ -72,6 +76,8 @@ class CoreTMManager:
         self._entry = EntryMonitor(repository)
         self._entry_review = EntryReviewCoordinator(repository)
         self._risk = RiskEngine(repository)
+        self._execution_requests = ExecutionRequestBuilder(repository)
+        self._execution = ExecutionEngine(repository)
         self._lock = RLock()
         self._started = False
 
@@ -124,6 +130,7 @@ class CoreTMManager:
             })
             self._refresh_position_context()
             self._refresh_entry_context()
+            self._refresh_execution_context()
             self._persist_all_contexts()
             self._started = True
             self._record_event(
@@ -406,6 +413,126 @@ class CoreTMManager:
             })
             self._repository.save_context(risk.to_record())
             return profile
+
+    def prepare_entry_execution_request(
+        self,
+        *,
+        entry_intent_id: str,
+        risk_decision_id: str,
+        broker: str,
+        exchange: str,
+        product: str,
+        side: OrderSide,
+        order_type: OrderType,
+        created_at: datetime,
+    ) -> ExecutionRequest:
+        """Create the broker-ready handoff only while RM permission is current."""
+        with self._lock:
+            self._ensure_started()
+            broker_ctx = dict(self._contexts.get("broker").data)
+            if broker_ctx.get("runtime_reconciled") is not True or broker_ctx.get("status") != "RECONCILED":
+                raise ExecutionAuthorizationError("Current broker truth is required before entry execution handoff")
+            if broker_ctx.get("broker") != broker:
+                raise ExecutionAuthorizationError("Execution broker does not match current broker truth")
+            decision = self._repository.get_risk_decision(risk_decision_id)
+            if decision is None:
+                raise KeyError(f"Unknown Risk decision: {risk_decision_id}")
+            if decision.metrics.get("broker_observed_at") != broker_ctx.get("observed_at"):
+                raise ExecutionAuthorizationError("Broker truth changed after Risk PASS; re-evaluate Risk")
+            request = self._execution_requests.from_entry(
+                entry_intent_id=entry_intent_id,
+                risk_decision_id=risk_decision_id,
+                broker=broker,
+                exchange=exchange,
+                product=product,
+                side=side,
+                order_type=order_type,
+                created_at=created_at,
+            )
+            self._record_event(DomainEvent.create(
+                "EXECUTION_REQUEST_CREATED", source="EXECUTION", occurred_at=created_at,
+                payload={"request_id": request.request_id, "purpose": request.purpose.value,
+                         "source_id": request.source_id, "idempotency_key": request.idempotency_key,
+                         "risk_decision_id": request.risk_decision_id},
+            ))
+            self._refresh_execution_context()
+            return request
+
+    def prepare_exit_execution_request(
+        self,
+        *,
+        exit_proposal_id: str,
+        broker: str,
+        order_type: OrderType,
+        created_at: datetime,
+        limit_price=None,
+    ) -> ExecutionRequest:
+        """Turn one approved exit proposal into the same Module M handoff contract."""
+        with self._lock:
+            self._ensure_started()
+            broker_ctx = dict(self._contexts.get("broker").data)
+            if broker_ctx.get("runtime_reconciled") is not True or broker_ctx.get("status") != "RECONCILED":
+                raise ExecutionAuthorizationError("Current broker truth is required before exit execution handoff")
+            if broker_ctx.get("broker") != broker:
+                raise ExecutionAuthorizationError("Exit execution broker does not match current broker truth")
+            request = self._execution_requests.from_exit(
+                exit_proposal_id=exit_proposal_id, broker=broker, order_type=order_type,
+                created_at=created_at, limit_price=limit_price,
+            )
+            self._record_event(DomainEvent.create(
+                "EXECUTION_REQUEST_CREATED", source="EXECUTION", occurred_at=created_at,
+                payload={"request_id": request.request_id, "purpose": request.purpose.value,
+                         "source_id": request.source_id, "idempotency_key": request.idempotency_key},
+            ))
+            self._refresh_execution_context()
+            return request
+
+    def deploy_execution_request(self, request_id: str, broker: ExecutionBroker) -> ExecutionRequest:
+        """Deploy through Module M. TM4/TGT1 permits simulation adapters only."""
+        with self._lock:
+            self._ensure_started()
+            if not broker.is_simulation:
+                raise PermissionError("TM4/TGT1 is PAPER-only; real broker writes are disabled")
+            pending = self._repository.get_execution_request(request_id)
+            if pending is None:
+                raise KeyError(f"Unknown execution request: {request_id}")
+            if pending.status == ExecutionRequestStatus.READY:
+                if pending.purpose == ExecutionPurpose.ENTRY:
+                    self._assert_entry_execution_authorization_current(pending)
+                else:
+                    self._assert_exit_execution_authorization_current(pending)
+            request, events = self._execution.deploy(request_id, broker)
+            for event in events:
+                self._record_event(event)
+            self._refresh_execution_context()
+            return request
+
+    def reconcile_execution_request(self, request_id: str, broker: ExecutionBroker) -> ExecutionRequest:
+        with self._lock:
+            self._ensure_started()
+            if not broker.is_simulation:
+                raise PermissionError("TM4/TGT1 is PAPER-only; real broker writes are disabled")
+            request, events = self._execution.reconcile(request_id, broker)
+            for event in events:
+                self._record_event(event)
+            self._refresh_execution_context()
+            return request
+
+    def cancel_execution_request(self, request_id: str, broker: ExecutionBroker) -> ExecutionRequest:
+        with self._lock:
+            self._ensure_started()
+            if not broker.is_simulation:
+                raise PermissionError("TM4/TGT1 is PAPER-only; real broker writes are disabled")
+            request, events = self._execution.cancel(request_id, broker)
+            for event in events:
+                self._record_event(event)
+            self._refresh_execution_context()
+            return request
+
+    def execution_snapshot(self) -> list[ExecutionRequest]:
+        with self._lock:
+            self._ensure_started()
+            return self._execution.list_requests()
 
     def patch_context(
         self,
@@ -1017,6 +1144,38 @@ class CoreTMManager:
             self._ensure_started()
             return runtime_fingerprint(self.status_snapshot(), self.positions_snapshot())
 
+    def _assert_entry_execution_authorization_current(self, request: ExecutionRequest) -> None:
+        if not request.risk_decision_id:
+            raise ExecutionAuthorizationError("ENTRY request has no Risk authorization")
+        decision = self._repository.get_risk_decision(request.risk_decision_id)
+        latest = self._repository.get_latest_risk_decision(request.source_id)
+        profile = self._repository.get_active_risk_profile()
+        broker_ctx = dict(self._contexts.get("broker").data)
+        if decision is None or latest is None or latest.decision_id != decision.decision_id or decision.decision != RiskDecision.PASS:
+            raise ExecutionAuthorizationError("ENTRY Risk permission is no longer current")
+        if profile is None or profile.version != decision.profile_version:
+            raise ExecutionAuthorizationError("ENTRY Risk profile changed after authorization")
+        if broker_ctx.get("runtime_reconciled") is not True or broker_ctx.get("status") != "RECONCILED":
+            raise ExecutionAuthorizationError("Current broker truth is required immediately before Module M")
+        if broker_ctx.get("broker") != request.broker or broker_ctx.get("observed_at") != decision.metrics.get("broker_observed_at"):
+            raise ExecutionAuthorizationError("Broker truth changed after Risk PASS; entry requires fresh Risk evaluation")
+
+    def _assert_exit_execution_authorization_current(self, request: ExecutionRequest) -> None:
+        broker_ctx = dict(self._contexts.get("broker").data)
+        if broker_ctx.get("runtime_reconciled") is not True or broker_ctx.get("status") != "RECONCILED" or broker_ctx.get("broker") != request.broker:
+            raise ExecutionAuthorizationError("Current matching broker truth is required immediately before exit deployment")
+        proposal = self._repository.get_exit_proposal(request.source_id)
+        if proposal is None or proposal.status.value != "APPROVED":
+            raise ExecutionAuthorizationError("Exit proposal is no longer approved")
+        position = self._repository.get_position(proposal.position_id)
+        if position is None or not position.is_open or not position.is_managed:
+            raise ExecutionAuthorizationError("Managed broker exposure is no longer open")
+        current_qty = abs(position.quantity)
+        if proposal.action == ExitAction.EXIT_ALL and request.quantity != current_qty:
+            raise ExecutionAuthorizationError("Broker position quantity changed after EXIT_ALL request; rebuild from current truth")
+        if request.quantity > current_qty:
+            raise ExecutionAuthorizationError("Exit request exceeds current broker-confirmed quantity")
+
     def _last_broker_observed_at(self, broker_name: str) -> datetime | None:
         broker_ctx = self._contexts.get("broker").data
         if broker_ctx.get("broker") != broker_name:
@@ -1086,6 +1245,20 @@ class CoreTMManager:
             }
         )
         self._repository.save_context(trade.to_record())
+
+    def _refresh_execution_context(self) -> None:
+        requests = self._execution.list_requests()
+        by_status: dict[str, int] = {}
+        for request in requests:
+            by_status[request.status.value] = by_status.get(request.status.value, 0) + 1
+        context = self._contexts.get("execution")
+        context.patch({
+            "mode": "PAPER",
+            "real_broker_writes_enabled": False,
+            "total_requests": len(requests),
+            "by_status": by_status,
+        })
+        self._repository.save_context(context.to_record())
 
     def _refresh_position_context(self, *, source: str | None = None) -> None:
         positions = self._repository.list_positions()

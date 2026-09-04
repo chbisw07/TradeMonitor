@@ -33,3 +33,7 @@ The previous TM0 placeholder milestone list is superseded by the four-milestone 
 TM3/TGT4 adds the independent external Agents gate for strategic/ambiguous exits, User escalation on disagreement/unavailability, automatic bypass for protective/deterministic exits, and restart-safe exit-review history. See `TM3_TGT4_ACCEPTANCE.md`.
 
 **Next:** TM4/TGT1 — Module M and Broker Deployment.
+
+## TM4/TGT1 — Module M and Broker Deployment — COMPLETE
+
+Implemented durable Entry/Exit ExecutionRequests, current-RM entry authorization, isolated Module M deployment, instrument resolution, idempotent submission, broker acknowledgement/partial-fill/fill/reject/cancel/uncertain reconciliation, restart-safe execution persistence, and simulation-only execution gating. Real broker writes remain disabled until later TM4 targets.

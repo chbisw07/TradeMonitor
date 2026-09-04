@@ -1,29 +1,29 @@
-# Broker Interface — TM1/TGT2
+# Broker Interfaces — TM4/TGT1
 
-TM1/TGT2 introduces the first broker abstraction as a **strictly read-only truth interface**.
+TradeMonitor deliberately separates **broker truth** from **broker mutation**.
 
-## Current Contract
+## `Broker` — factual/read-only interface
 
-A broker adapter exposes its identity and returns one coherent `BrokerAccountSnapshot` containing supported read-side facts such as:
+The original `Broker` contract remains the universal truth/reconciliation interface. It can return a coherent `BrokerAccountSnapshot` containing positions, funds/margins, and supported order/fill summaries. All brokers used by TM must be able to provide factual reality through this boundary.
 
-- broker positions;
-- funds/margin summary;
-- order count / fill count when available.
+## `ExecutionBroker` — explicit Module M capability
 
-The snapshot is consumed by the Core/Position reconciliation flow. Broker-reported position quantity/state is factual truth.
+TM4 introduces a second, stronger contract that extends `Broker` only for adapters deliberately capable of execution. It exposes:
 
-## Explicitly Absent
+- instrument resolution;
+- normalized order submission;
+- broker-order lookup by broker order ID;
+- broker-order lookup by TM client/idempotency ID;
+- explicit cancellation.
 
-The TGT2 `Broker` contract has no operation to:
+TradeMonitor core domains never call these methods. Only Module M receives an authorized `ExecutionRequest` and talks to an `ExecutionBroker`.
 
-- place/submit an order;
-- modify/cancel an order;
-- exit/hedge a position;
-- adopt an external position;
-- otherwise mutate broker state.
+## TGT1 Safety
 
-Live execution belongs to TM4 / Module M.
+TM4/TGT1 supplies only a deterministic simulation execution adapter. The Core rejects execution through adapters reporting `is_simulation = False`.
 
-## Position Boundary
+Real broker integration is therefore **not enabled** by TGT1. Real broker SEMI_AUTO work belongs to TM4/TGT3 after TGT2 execution replay/failure validation.
 
-New broker positions discovered through reconciliation enter TM as `UNMANAGED`. They are visible and durable but read-only until a later explicit adoption workflow changes their management status.
+## Idempotency / uncertainty
+
+The TM idempotency key is sent as the broker client-order identity. Module M durably records `SUBMITTING` before calling the broker. If acknowledgement is lost, the request becomes `UNCERTAIN` and reconciliation by client-order ID is attempted; TM does not infer failure and blind-submit another order.

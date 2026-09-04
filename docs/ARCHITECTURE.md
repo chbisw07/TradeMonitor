@@ -128,3 +128,18 @@ TradeMonitor is an independent program. Source systems are peers outside the cor
 No core domain may depend on Google Sheet workbook/sheet/column names, DayScanner/Positional Scanner field layouts, REST payload naming, or another user's proprietary schema. Direct console, Python, REST/web, Google Sheet, scanner, and future inputs must converge on the same Intake boundary. Source-specific parsing and connectivity remain adapter responsibilities.
 
 This boundary is intentionally compatible with the Unix-style architecture of small responsible components joined by explicit interfaces. A new source should normally be added without changes to Intake, Entry, Risk, Position/Exit, or Module M business logic.
+
+## TM4/TGT1 — Execution Deployment Boundary
+
+The decision domains remain upstream of execution. Entry and Exit produce authorized deployment handoffs; Module M does not prepare or judge the trade.
+
+```text
+Entry Decision + current RM PASS ─┐
+                                  ├─> ExecutionRequest ─> Module M ─> ExecutionBroker
+Approved Exit Proposal ───────────┘                         │
+                                                            └─> broker order truth
+```
+
+`ExecutionRequest` is the narrow boundary between business decisions and broker mechanics. It carries broker/instrument/side/quantity/order facts and provenance of the upstream authority. For ENTRY, the request is impossible to construct from a stale/non-current RM decision.
+
+The read-only `Broker` interface and write-capable `ExecutionBroker` interface remain separate. TGT1 only permits simulation execution adapters, preserving PAPER-only production safety while the execution machinery is validated.

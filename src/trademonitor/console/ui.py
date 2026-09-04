@@ -12,7 +12,7 @@ class ConsoleUI:
     """Render concise runtime state without owning business logic."""
 
     def render_status(self, snapshot: Mapping[str, Mapping[str, Any]]) -> str:
-        lines = ["TradeMonitor TM3/TGT4", "=" * 72]
+        lines = ["TradeMonitor TM4/TGT1", "=" * 72]
         health = snapshot.get("health", {}).get("data", {})
         broker = snapshot.get("broker", {}).get("data", {})
         positions = snapshot.get("position", {}).get("data", {})
@@ -82,6 +82,12 @@ class ConsoleUI:
                 decision=risk.get("last_decision", "none"),
             )
         )
+        execution = snapshot.get("execution", {}).get("data", {})
+        exec_states = execution.get("by_status", {})
+        exec_text = ", ".join(f"{name}={count}" for name, count in sorted(exec_states.items())) or "none"
+        lines.append(
+            f"Execution: Requests {execution.get('total_requests', 0)} | Status: {exec_text} | Real broker writes: DISABLED"
+        )
         lines.append("")
         lines.append("Domain Health")
         domains = health.get("domains", {})
@@ -106,7 +112,7 @@ class ConsoleUI:
                 f"- {name:<9} v{ctx.get('version', 0):<3} updated={ctx.get('updated_at', 'n/a')}"
             )
         lines.append("")
-        lines.append("BROKER ACCESS IS READ-ONLY — NO LIVE TRADING CAPABILITY")
+        lines.append("NO LIVE TRADING CAPABILITY — REAL BROKER WRITES DISABLED; MODULE M IS SIMULATION-ONLY IN TM4/TGT1")
         return "\n".join(lines)
 
     def render_positions(self, positions: Sequence[PositionRecord]) -> str:

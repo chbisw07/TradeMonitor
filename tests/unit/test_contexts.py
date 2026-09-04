@@ -14,6 +14,7 @@ def test_empty_runtime_contexts_have_canonical_names() -> None:
         "risk",
         "decision",
         "health",
+        "execution",
     }
 
 

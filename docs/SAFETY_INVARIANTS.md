@@ -124,3 +124,16 @@
 - Adding or removing a Google Sheet/scanner/web adapter must not alter core authority, Risk, Entry, Position/Exit, or execution semantics.
 - Direct/manual input must enter through the same Intake boundary and may not bypass de-duplication, Agents, Risk Management, or later Module M controls.
 - Source repetition or source count never grants execution authority and never implies scale-in.
+
+## TM4/TGT1 Execution / Module M Invariants
+
+- Nothing creating risk reaches Module M without current Risk Management permission.
+- An ENTRY `ExecutionRequest` must bind to the latest matching RM `PASS`, current Risk-profile version, and unchanged broker truth used by that Risk decision.
+- Module M performs deployment mechanics only; it never judges trade quality or grants Risk permission.
+- ENTRY and EXIT use the same Module M deployment contract.
+- `UNMANAGED` positions can never generate an exit `ExecutionRequest`.
+- Idempotency is durable before broker submission; repeated/restarted deployment of the same request must reconcile rather than blindly resubmit.
+- Missing/failed acknowledgement means `UNCERTAIN`, never assumed rejection/failure.
+- Broker order truth controls acknowledgement, partial-fill, fill, rejection, and cancellation state.
+- The read-only `Broker` contract remains distinct from the opt-in write-capable `ExecutionBroker` contract.
+- TM4/TGT1 permits simulation execution adapters only; real broker writes remain disabled.

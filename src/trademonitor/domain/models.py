@@ -1612,3 +1612,168 @@ class PositionConversionRequest:
             raise ValueError("reason is required")
         if self.new_horizon_at < self.requested_at:
             raise ValueError("new_horizon_at cannot be earlier than request time")
+
+
+# ---------------------------------------------------------------------------
+# TM4/TGT1 execution-deployment models
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class BrokerInstrument:
+    broker: str
+    exchange: str
+    symbol: str
+    product: str
+    instrument_token: str
+
+
+@dataclass(frozen=True)
+class BrokerOrderRequest:
+    """Normalized broker-facing order produced by Module M."""
+
+    broker: str
+    client_order_id: str
+    instrument: BrokerInstrument
+    side: "OrderSide"
+    quantity: int
+    order_type: "OrderType"
+    limit_price: Decimal | None = None
+
+    def __post_init__(self) -> None:
+        from trademonitor.domain.enums import OrderType
+        if self.quantity <= 0:
+            raise ValueError("quantity must be positive")
+        if self.order_type == OrderType.LIMIT and self.limit_price is None:
+            raise ValueError("LIMIT order requires limit_price")
+        if self.order_type == OrderType.MARKET and self.limit_price is not None:
+            raise ValueError("MARKET order must not carry limit_price")
+
+
+@dataclass(frozen=True)
+class BrokerOrderSnapshot:
+    """Normalized broker order truth used to reconcile Module M state."""
+
+    broker: str
+    broker_order_id: str
+    client_order_id: str
+    status: "BrokerOrderStatus"
+    requested_quantity: int
+    filled_quantity: int
+    average_fill_price: Decimal | None
+    observed_at: datetime
+    rejection_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "average_fill_price", _decimal(self.average_fill_price))
+        if self.requested_quantity <= 0:
+            raise ValueError("requested_quantity must be positive")
+        if self.filled_quantity < 0 or self.filled_quantity > self.requested_quantity:
+            raise ValueError("filled_quantity is outside valid range")
+
+
+@dataclass(frozen=True)
+class ExecutionRequest:
+    """Durable, authorized instruction handed to Module M.
+
+    The request deliberately contains deployment facts only.  It is immutable in
+    intent: status/fill fields evolve by replacing the durable record, while the
+    broker, instrument, side, quantity and source authority remain unchanged.
+    """
+
+    request_id: str
+    idempotency_key: str
+    purpose: "ExecutionPurpose"
+    source_id: str
+    broker: str
+    exchange: str
+    symbol: str
+    product: str
+    side: "OrderSide"
+    quantity: int
+    order_type: "OrderType"
+    limit_price: Decimal | None
+    status: "ExecutionRequestStatus"
+    created_at: datetime
+    updated_at: datetime
+    risk_decision_id: str | None = None
+    risk_profile_version: int | None = None
+    broker_order_id: str | None = None
+    filled_quantity: int = 0
+    average_fill_price: Decimal | None = None
+    rejection_reason: str | None = None
+    last_broker_observed_at: datetime | None = None
+    instrument_token: str | None = None
+
+    def __post_init__(self) -> None:
+        from trademonitor.domain.enums import ExecutionPurpose, OrderType
+        object.__setattr__(self, "limit_price", _decimal(self.limit_price))
+        object.__setattr__(self, "average_fill_price", _decimal(self.average_fill_price))
+        if not self.request_id.strip() or not self.idempotency_key.strip():
+            raise ValueError("request_id and idempotency_key are required")
+        if self.quantity <= 0:
+            raise ValueError("quantity must be positive")
+        if self.filled_quantity < 0 or self.filled_quantity > self.quantity:
+            raise ValueError("filled_quantity is outside valid range")
+        if self.order_type == OrderType.LIMIT and self.limit_price is None:
+            raise ValueError("LIMIT request requires limit_price")
+        if self.order_type == OrderType.MARKET and self.limit_price is not None:
+            raise ValueError("MARKET request must not carry limit_price")
+        if self.purpose == ExecutionPurpose.ENTRY:
+            if not self.risk_decision_id or self.risk_profile_version is None:
+                raise ValueError("ENTRY execution requires current Risk authorization")
+
+    def to_record(self) -> dict[str, Any]:
+        return {
+            "request_id": self.request_id,
+            "idempotency_key": self.idempotency_key,
+            "purpose": self.purpose.value,
+            "source_id": self.source_id,
+            "broker": self.broker,
+            "exchange": self.exchange,
+            "symbol": self.symbol,
+            "product": self.product,
+            "side": self.side.value,
+            "quantity": self.quantity,
+            "order_type": self.order_type.value,
+            "limit_price": None if self.limit_price is None else str(self.limit_price),
+            "status": self.status.value,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "risk_decision_id": self.risk_decision_id,
+            "risk_profile_version": self.risk_profile_version,
+            "broker_order_id": self.broker_order_id,
+            "filled_quantity": self.filled_quantity,
+            "average_fill_price": None if self.average_fill_price is None else str(self.average_fill_price),
+            "rejection_reason": self.rejection_reason,
+            "last_broker_observed_at": None if self.last_broker_observed_at is None else self.last_broker_observed_at.isoformat(),
+            "instrument_token": self.instrument_token,
+        }
+
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "ExecutionRequest":
+        from trademonitor.domain.enums import ExecutionPurpose, ExecutionRequestStatus, OrderSide, OrderType
+        return cls(
+            request_id=str(record["request_id"]),
+            idempotency_key=str(record["idempotency_key"]),
+            purpose=ExecutionPurpose(str(record["purpose"])),
+            source_id=str(record["source_id"]),
+            broker=str(record["broker"]),
+            exchange=str(record["exchange"]),
+            symbol=str(record["symbol"]),
+            product=str(record["product"]),
+            side=OrderSide(str(record["side"])),
+            quantity=int(record["quantity"]),
+            order_type=OrderType(str(record["order_type"])),
+            limit_price=record.get("limit_price"),
+            status=ExecutionRequestStatus(str(record["status"])),
+            created_at=datetime.fromisoformat(str(record["created_at"])),
+            updated_at=datetime.fromisoformat(str(record["updated_at"])),
+            risk_decision_id=record.get("risk_decision_id"),
+            risk_profile_version=record.get("risk_profile_version"),
+            broker_order_id=record.get("broker_order_id"),
+            filled_quantity=int(record.get("filled_quantity", 0)),
+            average_fill_price=record.get("average_fill_price"),
+            rejection_reason=record.get("rejection_reason"),
+            last_broker_observed_at=(None if record.get("last_broker_observed_at") is None else datetime.fromisoformat(str(record["last_broker_observed_at"]))),
+            instrument_token=record.get("instrument_token"),
+        )
